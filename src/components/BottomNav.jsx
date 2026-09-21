@@ -1,11 +1,11 @@
-import { Mic, Languages, Sparkles, History as HistoryIcon, Settings as SettingsIcon } from 'lucide-react';
+import { Mic, Languages, Users, Sparkles, History as HistoryIcon, Settings as SettingsIcon } from 'lucide-react';
 
 export default function BottomNav({ activeTab, setActiveTab }) {
   const navItems = [
     { id: 'dictate', label: 'Gõ giọng nói', icon: Mic },
-    { id: 'translate', label: 'Dịch đàm thoại', icon: Languages },
+    { id: 'translate', label: 'Đàm thoại', icon: Languages },
+    { id: 'meeting', label: 'Phòng họp AI', icon: Users },
     { id: 'chat', label: 'Trợ lý AI', icon: Sparkles },
-    { id: 'history', label: 'Lịch sử', icon: HistoryIcon },
     { id: 'settings', label: 'Cài đặt', icon: SettingsIcon },
   ];
 

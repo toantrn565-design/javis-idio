@@ -4,6 +4,7 @@ import Header from './components/Header';
 import BottomNav from './components/BottomNav';
 import VoiceDictation from './components/VoiceDictation';
 import Translator from './components/Translator';
+import MeetingMode from './components/MeetingMode';
 import AiChat from './components/AiChat';
 import History from './components/History';
 import SettingsScreen from './components/Settings';
@@ -46,6 +47,8 @@ export default function App() {
         return <VoiceDictation history={history} setHistory={setHistory} settings={settings} />;
       case 'translate':
         return <Translator history={history} setHistory={setHistory} settings={settings} />;
+      case 'meeting':
+        return <MeetingMode settings={settings} />;
       case 'chat':
         return <AiChat />;
       case 'history':

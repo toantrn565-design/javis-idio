@@ -1,11 +1,45 @@
-// Hệ thống Dịch thuật & Nhận diện Giọng nói AI Đa Tầng với Cơ Chế Tự Động Xoay API (Auto-Rotate & Failover)
+// Hệ thống Dịch thuật, Nhận diện & Trợ lý AI Đa Tầng với Cơ Chế Tự Động Xoay API (Auto-Rotate & Failover)
+// Hỗ trợ cả Google Gemini Trả Phí (Pay-as-you-go), Gemini Free, Groq, OpenRouter, OpenAI
 
-function getAllConfiguredKeys() {
+export const GEMINI_FREE_MODELS = [
+  'gemini-3.6-flash',
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
+  'gemini-1.5-flash-8b',
+  'gemini-1.5-pro'
+];
+
+export const GEMINI_PAID_MODELS = [
+  'gemini-2.5-pro',
+  'gemini-1.5-pro',
+  'gemini-3.6-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash'
+];
+
+export const GROQ_MODELS = [
+  'llama-3.3-70b-versatile',
+  'qwen-2.5-32b',
+  'llama-3.1-8b-instant',
+  'qwen/qwen3.8-27b',
+  'mixtral-8x7b-32768'
+];
+
+export const OPENROUTER_MODELS = [
+  'deepseek/deepseek-chat',
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'mistralai/mistral-7b-instruct:free',
+  'deepseek/deepseek-r1:free'
+];
+
+export function getAllConfiguredKeys() {
   try {
     const yapSettings = JSON.parse(localStorage.getItem('yap-settings') || '{}');
     const igrenSettings = JSON.parse(localStorage.getItem('igren-settings') || '{}');
 
     return {
+      geminiPaid: (yapSettings.geminiPaidApiKey || '').trim(),
       gemini: (yapSettings.geminiApiKey || igrenSettings.geminiApiKey || '').trim(),
       groq: (yapSettings.groqApiKey || igrenSettings.groqApiKey || '').trim(),
       openrouter: (yapSettings.openrouterApiKey || igrenSettings.openrouterApiKey || '').trim(),
@@ -19,7 +53,7 @@ function getAllConfiguredKeys() {
 }
 
 // Hàm thực thi với cơ chế Tự Động Xoay API (Auto-Rotate Failover)
-// Thứ tự ưu tiên: 1. Gemini -> 2. Groq -> 3. OpenRouter (Free DeepSeek/Llama) -> 4. OpenAI -> 5. Cohere
+// Thứ tự ưu tiên: 1. Gemini Paid -> 2. Gemini Free -> 3. Groq -> 4. OpenRouter -> 5. OpenAI
 async function executeWithAutoFailover(taskName, providers) {
   const errors = [];
 
@@ -27,7 +61,7 @@ async function executeWithAutoFailover(taskName, providers) {
     try {
       const result = await Promise.race([
         execute(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout quá 10 giây')), 10000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout quá 12 giây')), 12000))
       ]);
 
       if (result && typeof result === 'string' && result.trim()) {
@@ -43,20 +77,11 @@ async function executeWithAutoFailover(taskName, providers) {
     throw new Error('Chưa cấu hình bất kỳ API Key nào. Vui lòng vào Cài đặt để thêm khóa Gemini, Groq hoặc OpenRouter.');
   }
 
-  throw new Error(`Tất cả các nguồn AI đều gặp sự cố hoặc hết hạn mức (${errors.join(' | ')}). Vui lòng thêm hoặc kiểm tra API Key trong Cài đặt.`);
+  throw new Error(`Tất cả các nguồn AI đều gặp sự cố (${errors.join(' | ')}). Vui lòng kiểm tra API Key trong Cài đặt.`);
 }
 
-export const GEMINI_MODELS = [
-  'gemini-3.6-flash',
-  'gemini-2.5-flash',
-  'gemini-2.0-flash',
-  'gemini-1.5-flash',
-  'gemini-1.5-flash-8b',
-  'gemini-1.5-pro'
-];
-
 // Helper gọi Google Gemini với cơ chế thử tự động các model mới nhất
-async function callGeminiContent(apiKey, body, models = GEMINI_MODELS) {
+export async function callGeminiContent(apiKey, body, models = GEMINI_FREE_MODELS) {
   let lastError = null;
   for (const model of models) {
     try {
@@ -82,6 +107,74 @@ async function callGeminiContent(apiKey, body, models = GEMINI_MODELS) {
   throw lastError || new Error('Không thể kết nối tới Google Gemini');
 }
 
+// Helper gọi Groq với cơ chế fallback models
+export async function callGroqChat(apiKey, messages, temperature = 0.2) {
+  let lastError = null;
+  for (const model of GROQ_MODELS) {
+    try {
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model,
+          temperature,
+          messages
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const text = data.choices?.[0]?.message?.content;
+        if (text) return text;
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        lastError = new Error(`${model}: ${errJson.error?.message || res.status}`);
+      }
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  throw lastError || new Error('Groq AI không phản hồi');
+}
+
+// Helper gọi OpenRouter với cơ chế fallback models
+export async function callOpenRouterChat(apiKey, messages, temperature = 0.2) {
+  let lastError = null;
+  for (const model of OPENROUTER_MODELS) {
+    try {
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'HTTP-Referer': 'https://javis-idio.app',
+          'X-Title': 'JAVIS Idio - AI Voice & Live Translator'
+        },
+        body: JSON.stringify({
+          model,
+          temperature,
+          messages
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const text = data.choices?.[0]?.message?.content;
+        if (text) return text;
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        lastError = new Error(`${model}: ${errJson.error?.message || res.status}`);
+      }
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  throw lastError || new Error('OpenRouter không phản hồi');
+}
+
 // 1. DỊCH THUẬT VĂN BẢN (TRANSLATE TEXT)
 export async function translateText(text, sourceLanguage = 'vi', targetLanguage = 'en') {
   if (!text || !text.trim()) return '';
@@ -96,86 +189,59 @@ Do not add any explanation, notes, or markdown formatting. Return ONLY the pure 
 Translate the following text from ${sourceLanguage} to ${targetLanguage}:
 ${text}`;
 
-  // Ưu tiên 1: Google Gemini (Tự động xoay model Gemini 3.6 / 2.5 / 2.0 / 1.5)
+  // 0. Ưu tiên cao nhất: Google Gemini Trả Phí (Paid Key)
+  if (keys.geminiPaid) {
+    providers.push({
+      name: 'Google Gemini Paid (Pro/Flash)',
+      execute: async () => {
+        return await callGeminiContent(keys.geminiPaid, {
+          contents: [{ parts: [{ text: translationPrompt }] }],
+          generationConfig: { temperature: 0.2 }
+        }, GEMINI_PAID_MODELS);
+      }
+    });
+  }
+
+  // 1. Ưu tiên 1: Google Gemini Free
   if (keys.gemini) {
     providers.push({
-      name: 'Google Gemini',
+      name: 'Google Gemini Free',
       execute: async () => {
         return await callGeminiContent(keys.gemini, {
           contents: [{ parts: [{ text: translationPrompt }] }],
           generationConfig: { temperature: 0.2 }
-        });
+        }, GEMINI_FREE_MODELS);
       }
     });
   }
 
-  // Ưu tiên 2: Groq AI (Qwen 3.8 / Llama 3.3)
+  // 2. Ưu tiên 2: Groq AI
   if (keys.groq) {
     providers.push({
-      name: 'Groq AI',
+      name: 'Groq AI (Llama 3.3 / Qwen 2.5)',
       execute: async () => {
-        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${keys.groq}`
-          },
-          body: JSON.stringify({
-            model: 'qwen/qwen3.8-27b',
-            temperature: 0.2,
-            messages: [
-              { role: 'system', content: 'You are a professional bilingual translator. Translate directly without explanation.' },
-              { role: 'user', content: translationPrompt }
-            ]
-          })
-        });
-
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error?.message || `Lỗi ${res.status}`);
-        }
-
-        const data = await res.json();
-        return data.choices?.[0]?.message?.content;
+        return await callGroqChat(keys.groq, [
+          { role: 'system', content: 'You are a professional bilingual translator. Return only translated text.' },
+          { role: 'user', content: translationPrompt }
+        ], 0.2);
       }
     });
   }
 
-  // Ưu tiên 3: OpenRouter (DeepSeek R1 / Llama 3.3 Free)
+  // 3. Ưu tiên 3: OpenRouter Free
   if (keys.openrouter) {
     providers.push({
       name: 'OpenRouter (DeepSeek / Llama)',
       execute: async () => {
-        const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${keys.openrouter}`,
-            'HTTP-Referer': 'https://javis-idio.app',
-            'X-Title': 'JAVIS Idio - AI Voice & Live Translator'
-          },
-          body: JSON.stringify({
-            model: 'deepseek/deepseek-chat:free',
-            temperature: 0.2,
-            messages: [
-              { role: 'system', content: 'You are a professional translator. Return only the translated text.' },
-              { role: 'user', content: translationPrompt }
-            ]
-          })
-        });
-
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error?.message || `Lỗi ${res.status}`);
-        }
-
-        const data = await res.json();
-        return data.choices?.[0]?.message?.content;
+        return await callOpenRouterChat(keys.openrouter, [
+          { role: 'system', content: 'You are a professional translator. Return only the translated text.' },
+          { role: 'user', content: translationPrompt }
+        ], 0.2);
       }
     });
   }
 
-  // Ưu tiên 4: OpenAI (GPT-4o Mini)
+  // 4. Ưu tiên 4: OpenAI
   if (keys.openai) {
     providers.push({
       name: 'OpenAI GPT-4o Mini',
@@ -190,7 +256,7 @@ ${text}`;
             model: 'gpt-4o-mini',
             temperature: 0.2,
             messages: [
-              { role: 'system', content: 'You are a professional translator. Return only the translated text.' },
+              { role: 'system', content: 'You are a professional translator. Return only translated text.' },
               { role: 'user', content: translationPrompt }
             ]
           })
@@ -215,15 +281,17 @@ export async function transcribeAudioOnly({ audioBlob, base64Audio, mimeType, la
   const keys = getAllConfiguredKeys();
   const providers = [];
 
-  // Ưu tiên 1: Google Gemini Audio
-  if (keys.gemini && base64Audio) {
+  const audioPrompt = 'Transcribe the spoken audio accurately into the spoken language (Vietnamese/English). Add appropriate punctuation, capitalization, and numbers. Do not add preamble or markdown notes. Return ONLY the transcribed words.';
+
+  // 0. Google Gemini Paid
+  if (keys.geminiPaid && base64Audio) {
     providers.push({
-      name: 'Google Gemini Audio',
+      name: 'Google Gemini Paid Audio',
       execute: async () => {
-        return await callGeminiContent(keys.gemini, {
+        return await callGeminiContent(keys.geminiPaid, {
           contents: [{
             parts: [
-              { text: 'Transcribe the spoken audio accurately into the spoken language (Vietnamese/English). Add appropriate punctuation, capitalization, and numbers. Do not add preamble or markdown notes. Return ONLY the transcribed words.' },
+              { text: audioPrompt },
               {
                 inlineData: {
                   mimeType: mimeType || 'audio/webm',
@@ -233,12 +301,35 @@ export async function transcribeAudioOnly({ audioBlob, base64Audio, mimeType, la
             ]
           }],
           generationConfig: { temperature: 0.1 }
-        });
+        }, GEMINI_PAID_MODELS);
       }
     });
   }
 
-  // Ưu tiên 2: Groq Whisper Turbo
+  // 1. Google Gemini Free
+  if (keys.gemini && base64Audio) {
+    providers.push({
+      name: 'Google Gemini Free Audio',
+      execute: async () => {
+        return await callGeminiContent(keys.gemini, {
+          contents: [{
+            parts: [
+              { text: audioPrompt },
+              {
+                inlineData: {
+                  mimeType: mimeType || 'audio/webm',
+                  data: base64Audio
+                }
+              }
+            ]
+          }],
+          generationConfig: { temperature: 0.1 }
+        }, GEMINI_FREE_MODELS);
+      }
+    });
+  }
+
+  // 2. Groq Whisper Turbo
   if (keys.groq) {
     providers.push({
       name: 'Groq Whisper Turbo',
@@ -270,7 +361,7 @@ export async function transcribeAudioOnly({ audioBlob, base64Audio, mimeType, la
     });
   }
 
-  // Ưu tiên 3: OpenAI Whisper
+  // 3. OpenAI Whisper
   if (keys.openai) {
     providers.push({
       name: 'OpenAI Whisper',
@@ -336,21 +427,18 @@ export async function chatWithAI({ messages, image = null, documentText = '', do
   const keys = getAllConfiguredKeys();
   const providers = [];
 
-  // Tạo nội dung prompt bổ sung nếu có tài liệu
   let lastMessage = messages[messages.length - 1];
   let enhancedUserText = lastMessage?.content || '';
   if (documentText) {
     enhancedUserText += `\n\n[📄 TÀI LIỆU ĐÍNH KÈM: "${documentName}"]:\n${documentText}`;
   }
 
-  // Ưu tiên 1: Google Gemini (Hỗ trợ phân tích ảnh, OCR chữ trong ảnh, đọc tài liệu PDF/Word tốt nhất)
-  if (keys.gemini) {
+  // 0. Google Gemini Paid
+  if (keys.geminiPaid) {
     providers.push({
-      name: 'Google Gemini Multimodal',
+      name: 'Google Gemini Paid Multimodal',
       execute: async () => {
         const contents = [];
-
-        // Chuyển đổi lịch sử chat
         for (let i = 0; i < messages.length - 1; i++) {
           const m = messages[i];
           contents.push({
@@ -358,10 +446,7 @@ export async function chatWithAI({ messages, image = null, documentText = '', do
             parts: [{ text: m.content }]
           });
         }
-
-        // Message cuối cùng kèm ảnh (nếu có)
-        const lastParts = [{ text: enhancedUserText || (image ? 'Hãy đọc, chuyển thành văn bản (OCR) và dịch hoặc phân tích nội dung trong ảnh này giúp tôi.' : 'Xin chào') }];
-        
+        const lastParts = [{ text: enhancedUserText || (image ? 'Hãy phân tích nội dung trong ảnh này giúp tôi.' : 'Xin chào') }];
         if (image && image.base64) {
           lastParts.push({
             inlineData: {
@@ -370,21 +455,43 @@ export async function chatWithAI({ messages, image = null, documentText = '', do
             }
           });
         }
+        contents.push({ role: 'user', parts: lastParts });
 
-        contents.push({
-          role: 'user',
-          parts: lastParts
-        });
-
-        return await callGeminiContent(keys.gemini, {
-          contents,
-          generationConfig: { temperature: 0.5 }
-        });
+        return await callGeminiContent(keys.geminiPaid, { contents, generationConfig: { temperature: 0.5 } }, GEMINI_PAID_MODELS);
       }
     });
   }
 
-  // Ưu tiên 2: OpenAI (GPT-4o Mini Vision)
+  // 1. Google Gemini Free
+  if (keys.gemini) {
+    providers.push({
+      name: 'Google Gemini Free Multimodal',
+      execute: async () => {
+        const contents = [];
+        for (let i = 0; i < messages.length - 1; i++) {
+          const m = messages[i];
+          contents.push({
+            role: m.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: m.content }]
+          });
+        }
+        const lastParts = [{ text: enhancedUserText || (image ? 'Hãy đọc chữ và phân tích ảnh này giúp tôi.' : 'Xin chào') }];
+        if (image && image.base64) {
+          lastParts.push({
+            inlineData: {
+              mimeType: image.mimeType || 'image/jpeg',
+              data: image.base64
+            }
+          });
+        }
+        contents.push({ role: 'user', parts: lastParts });
+
+        return await callGeminiContent(keys.gemini, { contents, generationConfig: { temperature: 0.5 } }, GEMINI_FREE_MODELS);
+      }
+    });
+  }
+
+  // 2. OpenAI GPT-4o Mini Vision
   if (keys.openai) {
     providers.push({
       name: 'OpenAI GPT-4o Mini Vision',
@@ -438,69 +545,71 @@ export async function chatWithAI({ messages, image = null, documentText = '', do
     });
   }
 
-  // Ưu tiên 3: Groq AI
+  // 3. Groq (Text Only)
   if (keys.groq) {
     providers.push({
-      name: 'Groq AI Chat',
+      name: 'Groq AI (Text Assistant)',
       execute: async () => {
         const groqMessages = messages.slice(0, -1).map(m => ({ role: m.role, content: m.content }));
         groqMessages.push({ role: 'user', content: enhancedUserText + (image ? '\n[Lưu ý: Có đính kèm hình ảnh nhưng hãy trả lời dựa trên văn bản]' : '') });
-
-        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${keys.groq}`
-          },
-          body: JSON.stringify({
-            model: 'qwen/qwen3.8-27b',
-            messages: groqMessages,
-            temperature: 0.5
-          })
-        });
-
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error?.message || `Lỗi ${res.status}`);
-        }
-
-        const data = await res.json();
-        return data.choices?.[0]?.message?.content;
+        return await callGroqChat(keys.groq, groqMessages, 0.5);
       }
     });
   }
 
-  // Ưu tiên 4: OpenRouter
+  // 4. OpenRouter
   if (keys.openrouter) {
     providers.push({
       name: 'OpenRouter DeepSeek',
       execute: async () => {
         const orMessages = messages.slice(0, -1).map(m => ({ role: m.role, content: m.content }));
         orMessages.push({ role: 'user', content: enhancedUserText });
-
-        const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${keys.openrouter}`
-          },
-          body: JSON.stringify({
-            model: 'deepseek/deepseek-chat:free',
-            messages: orMessages,
-            temperature: 0.5
-          })
-        });
-
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error?.message || `Lỗi ${res.status}`);
-        }
-
-        const data = await res.json();
-        return data.choices?.[0]?.message?.content;
+        return await callOpenRouterChat(keys.openrouter, orMessages, 0.5);
       }
     });
   }
 
   return executeWithAutoFailover('Trợ Lý AI Đa Phương Tiện', providers);
+}
+
+// 5. TẠO BIÊN BẢN HỌP & TÓM TẮT CUỘC HỌP AI (MEETING MINUTES GENERATOR)
+export async function generateMeetingSummary({ transcriptText, meetingDuration = '', targetLang = 'vi' }) {
+  if (!transcriptText || !transcriptText.trim()) {
+    throw new Error('Chưa có dữ liệu biên bản thoại trong cuộc họp để tạo tóm tắt.');
+  }
+
+  const prompt = `Bạn là một Thư ký Cuộc họp & Chuyên gia Phân tích Doanh nghiệp AI cấp cao.
+Hãy đọc kỹ toàn bộ nội dung bản ghi âm cuộc họp (transcript) dưới đây và tạo ra một BẢN BIÊN BẢN HỌP CHUYÊN NGHIỆP (Meeting Minutes) bằng Tiếng Việt chuẩn mực, chi tiết và súc tích.
+
+--- THÔNG TIN CUỘC HỌP ---
+Thời lượng: ${meetingDuration || 'N/A'}
+Thời gian tạo: ${new Date().toLocaleString('vi-VN')}
+
+--- TOÀN BỘ NỘI DUNG THOẠI (TRANSCRIPT) ---
+${transcriptText}
+
+--- YÊU CẦU ĐỊNH DẠNG BIÊN BẢN HỌP (MARKDOWN) ---
+# 📋 BIÊN BẢN CUỘC HỌP (AI MEETING MINUTES)
+**Thời lượng:** ${meetingDuration} | **Thời gian:** ${new Date().toLocaleString('vi-VN')}
+
+## 1. 🎯 Tóm Tắt Tổng Quan (Executive Summary)
+(Tóm tắt nội dung và mục tiêu cốt lõi của cuộc họp trong 2 - 3 câu)
+
+## 2. 🔑 Các Chủ Đề & Ý Kiến Chính Được Thảo Luận (Key Discussions)
+(Gạch đầu dòng chi tiết các luận điểm, ý kiến thảo luận quan trọng)
+
+## 3. 🤝 Các Quyết Định Đã Thống Nhất (Decisions & Agreements)
+(Liệt kê các quyết định mà các bên đã đồng thuận)
+
+## 4. ⚡ Việc Cần Làm & Phân Công (Action Items & Next Steps)
+| STT | Công việc cần làm | Người phụ trách / Bộ phận | Thời hạn (Deadline) |
+|---|---|---|---|
+(Điền bảng công việc rõ ràng)
+
+## 5. 💡 Ghi Chú & Lưu Ý Quan Trọng (Important Notes)
+(Các rủi ro, câu hỏi mở hoặc vấn đề cần theo dõi thêm)
+
+Hãy trình bày chỉn chu, chuyên nghiệp, giữ nguyên tên người, số liệu, tiền tệ, ngày tháng chính xác.`;
+
+  return translateText(prompt, 'vi', 'vi');
 }
