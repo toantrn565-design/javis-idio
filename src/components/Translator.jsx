@@ -536,7 +536,7 @@ export default function Translator({ history, setHistory, settings }) {
         </div>
         <div className="space-y-1 text-slate-400">
           <p>• <strong>Anh nói:</strong> Bấm <span className="text-emerald-400 font-bold">NÓI {LANGUAGES[lang1]?.name.toUpperCase()}</span> &rarr; Tự dịch sang {LANGUAGES[lang2]?.name}, phát loa và copy sẵn để anh dán vào Zalo.</p>
-          <p>• <strong>Khách nhắn Zalo:</strong> Anh chỉ cần <span className="text-amber-400 font-bold">Sao chép (Copy)</span> ở Zalo &rarr; Mở YAP AI để xem ngay bản dịch tiếng Việt!</p>
+          <p>• <strong>Khách nhắn Zalo:</strong> Anh chỉ cần <span className="text-amber-400 font-bold">Sao chép (Copy)</span> ở Zalo &rarr; Mở JAVIS Idio để xem ngay bản dịch tiếng Việt!</p>
         </div>
       </div>
     </div>

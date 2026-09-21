@@ -15,7 +15,7 @@ export default function AiChat() {
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: 'Chào anh! Em là **YAP AI Assistant**. Anh có thể **nói trực tiếp qua Mic 🎙️**, **chụp ảnh hóa đơn/tài liệu 📸** để em dịch chữ trong ảnh, hoặc **tải file tài liệu 📎** lên để em dịch và tóm tắt.'
+      content: 'Chào anh! Em là **JAVIS Idio Assistant**. Anh có thể **nói trực tiếp qua Mic 🎙️**, **chụp ảnh hóa đơn/tài liệu 📸** để em dịch chữ trong ảnh, hoặc **tải file tài liệu 📎** lên để em dịch và tóm tắt.'
     }
   ]);
   const [input, setInput] = useState('');
@@ -245,7 +245,7 @@ export default function AiChat() {
     setMessages([
       {
         role: 'assistant',
-        content: 'Chào anh! Em là **YAP AI Assistant**. Em sẵn sàng hỗ trợ anh qua giọng nói, hình ảnh và tài liệu.'
+        content: 'Chào anh! Em là **JAVIS Idio Assistant**. Em sẵn sàng hỗ trợ anh qua giọng nói, hình ảnh và tài liệu.'
       }
     ]);
     setAttachedImage(null);
@@ -341,7 +341,7 @@ export default function AiChat() {
               <Bot className="w-4 h-4" />
             </div>
             <div className="bg-[#0f172a]/90 backdrop-blur-xl rounded-3xl px-4 py-2.5 shadow-xl border border-white/[0.08] flex items-center gap-2 text-xs text-slate-300">
-              <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" /> YAP AI đang đọc ảnh, tài liệu & phân tích...
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" /> JAVIS Idio đang đọc ảnh, tài liệu & phân tích...
             </div>
           </div>
         )}

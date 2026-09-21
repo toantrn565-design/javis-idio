@@ -112,8 +112,9 @@ async function handleTranslate({ text, sourceLang = 'vi', targetLang = 'en' }) {
 // Danh sách MCP Tools
 const TOOLS = [
   {
-    name: "yap_translate",
-    description: "Dịch thuật văn bản song ngữ chất lượng cao với cơ chế tự động xoay key (Google Gemini, Groq, OpenRouter, OpenAI).",
+  {
+    name: "javis_translate",
+    description: "Dịch thuật văn bản song ngữ chất lượng cao với cơ chế tự động xoay key của JAVIS Idio (Google Gemini, Groq, OpenRouter, OpenAI).",
     inputSchema: {
       type: "object",
       properties: {
@@ -125,19 +126,32 @@ const TOOLS = [
     }
   },
   {
-    name: "yap_check_api_health",
-    description: "Kiểm tra tình trạng kết nối và độ trễ phản hồi (latency) của các API Key trong hệ thống YAP AI.",
+    name: "javis_check_api_health",
+    description: "Kiểm tra tình trạng kết nối và độ trễ phản hồi (latency) của các API Key trong hệ thống JAVIS Idio.",
     inputSchema: {
       type: "object",
       properties: {}
     }
   },
   {
-    name: "yap_get_app_info",
-    description: "Lấy thông tin phiên bản, trạng thái gói cài đặt Android APK và Windows Desktop của YAP AI Translator Premium.",
+    name: "javis_get_app_info",
+    description: "Lấy thông tin phiên bản, trạng thái gói cài đặt Android APK và Windows Desktop của JAVIS Idio Translator Premium.",
     inputSchema: {
       type: "object",
       properties: {}
+    }
+  },
+  {
+    name: "yap_translate",
+    description: "Alias tương thích ngược cho javis_translate.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        text: { type: "string", description: "Đoạn văn bản cần dịch" },
+        sourceLang: { type: "string", description: "Mã ngôn ngữ nguồn", default: "vi" },
+        targetLang: { type: "string", description: "Mã ngôn ngữ đích", default: "en" }
+      },
+      required: ["text"]
     }
   }
 ];
@@ -166,7 +180,7 @@ rl.on('line', async (line) => {
             tools: {}
           },
           serverInfo: {
-            name: "yap-ai-mcp-server",
+            name: "javis-idio-mcp-server",
             version: "1.0.0"
           }
         }
@@ -192,7 +206,7 @@ rl.on('line', async (line) => {
     if (request.method === 'tools/call') {
       const { name, arguments: args } = request.params;
 
-      if (name === 'yap_translate') {
+      if (name === 'javis_translate' || name === 'yap_translate') {
         const result = await handleTranslate(args);
         console.log(JSON.stringify({
           jsonrpc: '2.0',
@@ -204,7 +218,7 @@ rl.on('line', async (line) => {
         return;
       }
 
-      if (name === 'yap_check_api_health') {
+      if (name === 'javis_check_api_health' || name === 'yap_check_api_health') {
         const health = {
           geminiConfigured: !!CONFIG.geminiKey,
           groqConfigured: !!CONFIG.groqKey,
@@ -222,14 +236,15 @@ rl.on('line', async (line) => {
         return;
       }
 
-      if (name === 'yap_get_app_info') {
+      if (name === 'javis_get_app_info' || name === 'yap_get_app_info') {
         const info = {
-          appName: "YAP AI Voice & Live Translator Premium",
+          appName: "JAVIS Idio - AI Voice & Live Translator Premium",
           version: "1.0.0",
-          repoUrl: "https://github.com/toantrn565-design/yap-ai-translator",
-          mobileBuildZip: "YAP_AI_Mobile_Build.zip",
+          tagline: "Your Own Language - Ngôn ngữ riêng của bạn",
+          repoUrl: "https://github.com/toantrn565-design/javis-idio",
+          mobileBuildZip: "JAVIS_Idio_Mobile_Build.zip",
           androidProjectPath: "android/",
-          desktopExePath: "dist-electron/YAP AI Translator Premium-win32-x64/YAP AI Translator Premium.exe"
+          desktopExePath: "dist-electron/JAVIS Idio-win32-x64/JAVIS Idio.exe"
         };
         console.log(JSON.stringify({
           jsonrpc: '2.0',

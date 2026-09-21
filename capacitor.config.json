@@ -1,6 +1,6 @@
 {
-  "appId": "com.yap.translator.premium",
-  "appName": "YAP AI Translator Premium",
+  "appId": "com.javis.idio",
+  "appName": "JAVIS Idio",
   "webDir": "dist",
   "bundledWebRuntime": false,
   "plugins": {

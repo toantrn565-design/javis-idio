@@ -9,13 +9,13 @@ export default function Header() {
           <div className="relative flex items-center justify-center">
             <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl blur-xs opacity-70"></div>
             <div className="relative w-9 h-9 rounded-xl bg-gradient-to-br from-slate-900 via-slate-800 to-black p-1.5 border border-white/20 shadow-inner flex items-center justify-center">
-              <img src="/favicon.svg" alt="YAP AI Logo" className="w-full h-full object-contain filter drop-shadow" />
+              <img src="/favicon.svg" alt="JAVIS Idio Logo" className="w-full h-full object-contain filter drop-shadow" />
             </div>
           </div>
 
           <div>
             <div className="flex items-center gap-1.5">
-              <span className="font-extrabold text-lg tracking-tight text-white font-['Outfit']">YAP AI</span>
+              <span className="font-extrabold text-lg tracking-tight text-white font-['Outfit']">JAVIS Idio</span>
               <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-600 text-slate-950 shadow-sm shadow-amber-500/20">
                 PREMIUM
               </span>

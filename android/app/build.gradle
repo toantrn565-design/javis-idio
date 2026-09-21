@@ -4,7 +4,7 @@ android {
     namespace = "com.yap.translator.premium"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.yap.translator.premium"
+        applicationId "com.javis.idio"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

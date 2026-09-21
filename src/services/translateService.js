@@ -135,8 +135,8 @@ ${text}`;
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${keys.openrouter}`,
-            'HTTP-Referer': 'https://yap-ai.app',
-            'X-Title': 'YAP AI Translator'
+            'HTTP-Referer': 'https://javis-idio.app',
+            'X-Title': 'JAVIS Idio - AI Voice & Live Translator'
           },
           body: JSON.stringify({
             model: 'deepseek/deepseek-chat:free',

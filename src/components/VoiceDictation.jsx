@@ -179,7 +179,7 @@ export default function VoiceDictation({ history, setHistory, settings }) {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: 'YAP AI Voice Note',
+          title: 'JAVIS Idio Voice Note',
           text: textToShare,
         });
       } catch (err) {

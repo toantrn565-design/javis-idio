@@ -1,5 +1,6 @@
-# 💎 YAP AI Voice & Live Translator - PREMIUM EDITION
+# 💎 JAVIS Idio - AI Voice & Live Translator (PREMIUM EDITION)
 
+> **"Ngôn ngữ riêng của bạn - Your Own Language"**  
 > **Ứng dụng Gõ Giọng Nói Chuẩn Hóa & Dịch Thuật Đàm Thoại Song Ngữ 2 Chiều Siêu Tốc (0.01s)**  
 > Tích hợp hệ thống AI đa tầng: **Google Gemini 2.5 Flash**, **Groq AI (Whisper Large V3 Turbo + Qwen 3.8)**, **OpenRouter (DeepSeek R1 / Llama 3.3 Free)**, và **OpenAI (GPT-4o Mini)**.
 
@@ -34,11 +35,11 @@
 
 | Nền Tảng | Tên Gói / Đường Dẫn | Ghi Chú |
 | :--- | :--- | :--- |
-| **Windows PC Desktop** | `dist-electron/YAP AI Translator Premium-win32-x64/YAP AI Translator Premium.exe` | Bản Portable chạy ngay không cần cài đặt |
-| **Launcher Bấm Nhanh PC** | `CHAY_YAP_AI_PC_PREMIUM.bat` | Bấm 1 chạm để mở app trên máy tính |
-| **Mobile & Web PWA** | `YAP_AI_Mobile_Build_PREMIUM.zip` | Kéo thả vào Netlify để cập nhật |
-| **Android Native APK** | `android/` | Dự án Capacitor Android Studio sẵn sàng xuất APK |
-| **MCP Server** | `mcp-server/index.js` | Cổng kết nối AI Agents toàn cầu |
+| **Windows PC Desktop** | `dist-electron/JAVIS Idio-win32-x64/JAVIS Idio.exe` | Bản Portable chạy ngay không cần cài đặt |
+| **Launcher Bấm Nhanh PC** | `CHAY_JAVIS_IDIO_PC.bat` | Bấm 1 chạm để mở app trên máy tính |
+| **Mobile & Web PWA** | `JAVIS_Idio_Mobile_Build.zip` | Kéo thả vào Netlify để cập nhật |
+| **Android Native APK** | `android/` | Dự án Capacitor Android Studio (`com.javis.idio`) |
+| **MCP Server** | `mcp-server/index.js` | Cổng kết nối AI Agents toàn cầu (`javis-idio-mcp-server`) |
 
 ---
 

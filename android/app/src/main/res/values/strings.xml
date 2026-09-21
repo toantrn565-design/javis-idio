@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">YAP AI Translator Premium</string>
-    <string name="title_activity_main">YAP AI Translator Premium</string>
-    <string name="package_name">com.yap.translator.premium</string>
-    <string name="custom_url_scheme">com.yap.translator.premium</string>
+    <string name="app_name">JAVIS Idio</string>
+    <string name="title_activity_main">JAVIS Idio</string>
+    <string name="package_name">com.javis.idio</string>
+    <string name="custom_url_scheme">com.javis.idio</string>
 </resources>
