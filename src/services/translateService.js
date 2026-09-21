@@ -1,465 +1,457 @@
-const defaultApiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_OPENAI_API_KEY || '';
+// Hệ thống Dịch thuật & Nhận diện Giọng nói AI Đa Tầng với Cơ Chế Tự Động Xoay API (Auto-Rotate & Failover)
 
-function getApiKeys() {
+function getAllConfiguredKeys() {
   try {
     const yapSettings = JSON.parse(localStorage.getItem('yap-settings') || '{}');
     const igrenSettings = JSON.parse(localStorage.getItem('igren-settings') || '{}');
-    
-    const keys = [];
-    
-    // 1. Separate keys
-    if (yapSettings.groqApiKey && yapSettings.groqApiKey.trim()) keys.push(yapSettings.groqApiKey.trim());
-    if (yapSettings.geminiApiKey && yapSettings.geminiApiKey.trim()) keys.push(yapSettings.geminiApiKey.trim());
-    if (yapSettings.openaiApiKey && yapSettings.openaiApiKey.trim()) keys.push(yapSettings.openaiApiKey.trim());
 
-    // 2. Legacy apiKeys string
-    const rawKeys = yapSettings.apiKeys || igrenSettings.apiKeys || '';
-    if (rawKeys && rawKeys.trim()) {
-      const extraKeys = rawKeys.split(/[\n,; ]+/).map(k => k.trim()).filter(Boolean);
-      for (const k of extraKeys) {
-        if (!keys.includes(k)) keys.push(k);
-      }
-    }
-
-    if (keys.length > 0) return keys;
+    return {
+      gemini: (yapSettings.geminiApiKey || igrenSettings.geminiApiKey || '').trim(),
+      groq: (yapSettings.groqApiKey || igrenSettings.groqApiKey || '').trim(),
+      openrouter: (yapSettings.openrouterApiKey || igrenSettings.openrouterApiKey || '').trim(),
+      openai: (yapSettings.openaiApiKey || igrenSettings.openaiApiKey || '').trim(),
+      cohere: (yapSettings.cohereApiKey || igrenSettings.cohereApiKey || '').trim(),
+    };
   } catch (e) {
-    console.error("Lỗi đọc API keys từ LocalStorage:", e);
+    console.error("Lỗi đọc cấu hình API từ LocalStorage:", e);
+    return {};
   }
-  if (defaultApiKey && defaultApiKey !== 'your_api_key_here') {
-    return [defaultApiKey];
-  }
-  return [];
 }
 
-async function fetchWithRetry(requestFn) {
-  const keys = getApiKeys();
-  if (keys.length === 0 || !keys[0] || keys[0] === 'your_api_key_here') {
-    throw new Error("Chưa cấu hình API Key. Hãy vào phần Cài đặt để thêm khóa API.");
-  }
+// Hàm thực thi với cơ chế Tự Động Xoay API (Auto-Rotate Failover)
+// Thứ tự ưu tiên: 1. Gemini -> 2. Groq -> 3. OpenRouter (Free DeepSeek/Llama) -> 4. OpenAI -> 5. Cohere
+async function executeWithAutoFailover(taskName, providers) {
+  const errors = [];
 
-  // Shuffle keys or just try them sequentially
-  let lastError = null;
-  for (let i = 0; i < keys.length; i++) {
-    const currentKey = keys[i];
+  for (const { name, execute } of providers) {
     try {
-      const response = await requestFn(currentKey);
-      
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        const errMsg = errData?.error?.message || response.statusText;
-        
-        // If it's a rate limit (429) AND we have more keys to try, continue to next key
-        if ((response.status === 429 || (errMsg && errMsg.includes('quota'))) && i < keys.length - 1) {
-          console.warn(`Key ${i + 1} hit quota, rotating to next key...`);
-          continue; 
-        }
+      // Thiết lập timeout 8 giây cho mỗi nhà cung cấp để tránh bị treo
+      const result = await Promise.race([
+        execute(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout quá 8 giây')), 8000))
+      ]);
 
-        // Otherwise, throw immediately
-        if (response.status === 429 || (errMsg && errMsg.includes('quota'))) {
-           throw new Error('Đã hết hạn mức sử dụng của tất cả khóa API. Vui lòng đợi 30 giây hoặc thêm khóa API mới trong Cài đặt.');
-        }
-        throw new Error(`Lỗi API: ${errMsg}`);
+      if (result && typeof result === 'string' && result.trim()) {
+        return result.trim();
       }
-      
-      return response;
-    } catch (error) {
-      lastError = error;
-      // Only rotate on specific network or quota errors, but fetch throws TypeError on network fail
-      if (i === keys.length - 1) throw error;
+    } catch (err) {
+      console.warn(`[Auto-Rotate] ${taskName}: ${name} thất bại (${err.message}). Tự động chuyển sang AI tiếp theo...`);
+      errors.push(`${name}: ${err.message}`);
     }
   }
-  throw lastError;
+
+  // Nếu tất cả AI đều thất bại
+  if (errors.length === 0) {
+    throw new Error('Chưa cấu hình bất kỳ API Key nào. Vui lòng vào Cài đặt để thêm khóa Gemini, Groq hoặc OpenRouter.');
+  }
+
+  throw new Error(`Tất cả các nguồn AI đều gặp sự cố hoặc hết hạn mức (${errors.join(' | ')}). Vui lòng thêm hoặc kiểm tra API Key trong Cài đặt.`);
 }
 
-export async function translateText({ text, sourceLanguage, targetLanguage }) {
-  if (!text || text.trim() === '') return '';
+// 1. DỊCH THUẬT VĂN BẢN (TRANSLATE TEXT)
+export async function translateText(text, sourceLanguage = 'vi', targetLanguage = 'en') {
+  if (!text || !text.trim()) return '';
 
-  try {
-    const response = await fetchWithRetry((key) => {
-      // 1. Groq API (Verified 200 OK with qwen/qwen3.8-27b)
-      if (key.startsWith('gsk_')) {
-        return fetch('https://api.groq.com/openai/v1/chat/completions', {
+  const keys = getAllConfiguredKeys();
+  const providers = [];
+
+  const translationPrompt = `You are a professional high-accuracy bilingual translator. 
+Translate accurately and naturally. Preserve names, numbers, currency values, product codes, technical terms, brand names, addresses, and dates. 
+Do not add any explanation, notes, or markdown formatting. Return ONLY the pure translated text.
+
+Translate the following text from ${sourceLanguage} to ${targetLanguage}:
+${text}`;
+
+  // Ưu tiên 1: Google Gemini (Gemini 2.5 Flash / 2.0 Flash)
+  if (keys.gemini) {
+    providers.push({
+      name: 'Google Gemini',
+      execute: async () => {
+        // Thử model 2.5 flash, fallback 2.0 flash, fallback 1.5 flash
+        const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+        for (const model of models) {
+          try {
+            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${keys.gemini}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: translationPrompt }] }],
+                generationConfig: { temperature: 0.2 }
+              })
+            });
+
+            if (res.ok) {
+              const data = await res.json();
+              const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (result) return result;
+            } else {
+              const err = await res.json().catch(() => ({}));
+              if (model === models[models.length - 1]) throw new Error(err.error?.message || `Lỗi ${res.status}`);
+            }
+          } catch (e) {
+            if (model === models[models.length - 1]) throw e;
+          }
+        }
+      }
+    });
+  }
+
+  // Ưu tiên 2: Groq AI (Qwen 3.8 / Llama 3.3)
+  if (keys.groq) {
+    providers.push({
+      name: 'Groq AI',
+      execute: async () => {
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${key}`
+            'Authorization': `Bearer ${keys.groq}`
           },
           body: JSON.stringify({
             model: 'qwen/qwen3.8-27b',
-            temperature: 0.3,
+            temperature: 0.2,
             messages: [
-              {
-                role: 'system',
-                content: 'You are a professional bilingual translator. Translate accurately and naturally. Preserve names, numbers, prices, dates, addresses, product codes, technical terms, and brand names. Do not add explanation or formatting. Return only the translated text.'
-              },
-              {
-                role: 'user',
-                content: `Translate the following text from ${sourceLanguage} to ${targetLanguage}:\n\n${text}`
-              }
+              { role: 'system', content: 'You are a professional bilingual translator. Translate directly without explanation.' },
+              { role: 'user', content: translationPrompt }
             ]
           })
         });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error?.message || `Lỗi ${res.status}`);
+        }
+
+        const data = await res.json();
+        return data.choices?.[0]?.message?.content;
       }
-      
-      // 2. OpenAI API
-      if (key.startsWith('sk-')) {
-        return fetch('https://api.openai.com/v1/chat/completions', {
+    });
+  }
+
+  // Ưu tiên 3: OpenRouter (DeepSeek R1 / Llama 3.3 Free)
+  if (keys.openrouter) {
+    providers.push({
+      name: 'OpenRouter (DeepSeek / Llama)',
+      execute: async () => {
+        const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${key}`
+            'Authorization': `Bearer ${keys.openrouter}`,
+            'HTTP-Referer': 'https://yap-ai.app',
+            'X-Title': 'YAP AI Translator'
           },
           body: JSON.stringify({
-            model: 'gpt-4o-mini',
-            temperature: 0.3,
+            model: 'deepseek/deepseek-chat:free',
+            temperature: 0.2,
             messages: [
-              {
-                role: 'system',
-                content: 'You are a professional bilingual translator. Translate accurately and naturally. Return only the translated text.'
-              },
-              {
-                role: 'user',
-                content: `Translate from ${sourceLanguage} to ${targetLanguage}:\n\n${text}`
-              }
+              { role: 'system', content: 'You are a professional translator. Return only the translated text.' },
+              { role: 'user', content: translationPrompt }
             ]
           })
         });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error?.message || `Lỗi ${res.status}`);
+        }
+
+        const data = await res.json();
+        return data.choices?.[0]?.message?.content;
       }
-
-      // 3. Google Gemini
-      return fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: `You are a professional bilingual translator. Translate accurately and naturally. Preserve names, numbers, prices, dates, addresses, product codes, technical terms, and brand names. Do not add explanation. Do not summarize. Return only the translated result.\n\nTranslate the following text from ${sourceLanguage} to ${targetLanguage}:\n\n${text}`
-            }]
-          }],
-          generationConfig: { temperature: 0.3 }
-        })
-      });
     });
-
-    const data = await response.json();
-    if (data.choices && data.choices[0]?.message?.content) {
-      return data.choices[0].message.content.trim();
-    }
-    if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
-      return data.candidates[0].content.parts[0].text.trim();
-    }
-    return '';
-  } catch (error) {
-    console.error("Translation API error:", error);
-    throw new Error(error.message || "Lỗi kết nối API. Hãy kiểm tra lại API Key.");
   }
+
+  // Ưu tiên 4: OpenAI (GPT-4o Mini)
+  if (keys.openai) {
+    providers.push({
+      name: 'OpenAI GPT-4o Mini',
+      execute: async () => {
+        const res = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${keys.openai}`
+          },
+          body: JSON.stringify({
+            model: 'gpt-4o-mini',
+            temperature: 0.2,
+            messages: [
+              { role: 'system', content: 'You are a professional translator. Return only the translated text.' },
+              { role: 'user', content: translationPrompt }
+            ]
+          })
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error?.message || `Lỗi ${res.status}`);
+        }
+
+        const data = await res.json();
+        return data.choices?.[0]?.message?.content;
+      }
+    });
+  }
+
+  return executeWithAutoFailover('Dịch Thuật', providers);
 }
 
-// Chuyển đổi giọng nói thành văn bản thuần (Yap Voice-to-Text)
+// 2. NHẬN DIỆN GIỌNG NÓI (VOICE TRANSCRIPTION)
 export async function transcribeAudioOnly({ audioBlob, base64Audio, mimeType, language = 'vi' }) {
-  try {
-    const response = await fetchWithRetry(async (key) => {
-      // 1. Groq Whisper (Siêu nhanh, miễn phí)
-      if (key.startsWith('gsk_')) {
+  const keys = getAllConfiguredKeys();
+  const providers = [];
+
+  // Ưu tiên 1: Google Gemini (Nhận diện âm thanh đa ngôn ngữ cực chuẩn)
+  if (keys.gemini && base64Audio) {
+    providers.push({
+      name: 'Google Gemini Audio',
+      execute: async () => {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${keys.gemini}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                { text: 'Transcribe the spoken audio accurately into the spoken language (Vietnamese/English). Add appropriate punctuation, capitalization, and numbers. Do not add preamble or markdown notes. Return ONLY the transcribed words.' },
+                {
+                  inlineData: {
+                    mimeType: mimeType || 'audio/webm',
+                    data: base64Audio
+                  }
+                }
+              ]
+            }],
+            generationConfig: { temperature: 0.1 }
+          })
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error?.message || `Lỗi ${res.status}`);
+        }
+
+        const data = await res.json();
+        return data.candidates?.[0]?.content?.parts?.[0]?.text;
+      }
+    });
+  }
+
+  // Ưu tiên 2: Groq Whisper (Whisper Large V3 Turbo siêu tốc)
+  if (keys.groq) {
+    providers.push({
+      name: 'Groq Whisper Turbo',
+      execute: async () => {
         const formData = new FormData();
-        const blobToUse = audioBlob || new Blob([Uint8Array.from(atob(base64Audio), c => c.charCodeAt(0))], { type: mimeType || 'audio/webm' });
+        const blobToUse = audioBlob || (base64Audio ? new Blob([Uint8Array.from(atob(base64Audio), c => c.charCodeAt(0))], { type: mimeType || 'audio/webm' }) : null);
+        if (!blobToUse) throw new Error('Không có dữ liệu âm thanh');
+
         const file = new File([blobToUse], 'audio.webm', { type: mimeType || 'audio/webm' });
         formData.append('file', file);
         formData.append('model', 'whisper-large-v3-turbo');
         formData.append('language', language === 'vi' ? 'vi' : language);
         formData.append('response_format', 'json');
 
-        return fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+        const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${key}`
+            'Authorization': `Bearer ${keys.groq}`
           },
           body: formData
         });
-      }
 
-      // 2. OpenAI Whisper
-      if (key.startsWith('sk-')) {
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error?.message || `Lỗi ${res.status}`);
+        }
+
+        const data = await res.json();
+        return data.text;
+      }
+    });
+  }
+
+  // Ưu tiên 3: OpenAI Whisper
+  if (keys.openai) {
+    providers.push({
+      name: 'OpenAI Whisper',
+      execute: async () => {
         const formData = new FormData();
-        const blobToUse = audioBlob || new Blob([Uint8Array.from(atob(base64Audio), c => c.charCodeAt(0))], { type: mimeType || 'audio/webm' });
+        const blobToUse = audioBlob || (base64Audio ? new Blob([Uint8Array.from(atob(base64Audio), c => c.charCodeAt(0))], { type: mimeType || 'audio/webm' }) : null);
+        if (!blobToUse) throw new Error('Không có dữ liệu âm thanh');
+
         const file = new File([blobToUse], 'audio.webm', { type: mimeType || 'audio/webm' });
         formData.append('file', file);
         formData.append('model', 'whisper-1');
         formData.append('language', language === 'vi' ? 'vi' : language);
 
-        return fetch('https://api.openai.com/v1/audio/transcriptions', {
+        const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${key}`
+            'Authorization': `Bearer ${keys.openai}`
           },
           body: formData
         });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error?.message || `Lỗi ${res.status}`);
+        }
+
+        const data = await res.json();
+        return data.text;
       }
-
-      // 3. Google Gemini Audio
-      return fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: `You are an expert speech recognition system. Transcribe the audio accurately into Vietnamese (or the spoken language). Fix punctuation, capitalization, and spelling. Do not add any explanation or preamble. Return ONLY the transcribed text.`
-            }, {
-              inlineData: {
-                mimeType: mimeType || 'audio/webm',
-                data: base64Audio
-              }
-            }]
-          }],
-          generationConfig: {
-            temperature: 0.1
-          }
-        })
-      });
     });
-
-    const data = await response.json();
-    if (data.text) {
-      return data.text.trim();
-    }
-    if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
-      return data.candidates[0].content.parts[0].text.trim();
-    }
-    return '';
-  } catch (error) {
-    console.error("Transcribe API error:", error);
-    throw new Error(error.message || "Lỗi khi nhận diện giọng nói.");
   }
+
+  return executeWithAutoFailover('Nhận Diện Giọng Nói', providers);
 }
 
-// Yap AI Refine / Chuẩn hóa văn bản theo chế độ
-export async function refineTextWithAI({ text, mode = 'exact', customPrompt = '' }) {
+// 3. CHUẨN HÓA VĂN BẢN (AI REFINE)
+export async function refineTextWithAI({ text, mode = 'exact' }) {
   if (!text || !text.trim()) return '';
 
-  let systemPrompt = 'Bạn là trợ lý AI chuyên xử lý văn bản tiếng Việt từ giọng nói (Yap AI).';
-  let userPrompt = '';
-
+  let prompt = '';
   switch (mode) {
     case 'work':
-      userPrompt = `Viết lại đoạn văn sau thành văn phong chuẩn mực công việc, lưu loát, chuyên nghiệp và rõ ràng, giữ trọn vẹn thông tin:\n\n"${text}"\n\nChỉ trả về văn bản kết quả, không thêm giải thích hay lời mở đầu.`;
+      prompt = `Viết lại đoạn văn sau thành văn phong chuẩn mực công việc, lưu loát, chuyên nghiệp và rõ ràng, giữ trọn vẹn thông tin:\n\n"${text}"\n\nChỉ trả về văn bản kết quả.`;
       break;
     case 'summary':
-      userPrompt = `Tóm tắt các ý chính trong đoạn văn sau thành các gạch đầu dòng ngắn gọn, súc tích:\n\n"${text}"\n\nChỉ trả về kết quả tóm tắt.`;
+      prompt = `Tóm tắt các ý chính trong đoạn văn sau thành các gạch đầu dòng ngắn gọn, súc tích:\n\n"${text}"\n\nChỉ trả về kết quả tóm tắt.`;
       break;
     case 'message':
-      userPrompt = `Viết lại đoạn văn sau thành một tin nhắn (Zalo/SMS/Email) ngắn gọn, lịch sự, thân thiện và dễ đọc:\n\n"${text}"\n\nChỉ trả về nội dung tin nhắn.`;
+      prompt = `Viết lại đoạn văn sau thành một tin nhắn (Zalo/SMS/Email) ngắn gọn, lịch sự, thân thiện và dễ đọc:\n\n"${text}"\n\nChỉ trả về nội dung tin nhắn.`;
       break;
     case 'english':
-      userPrompt = `Dịch đoạn văn bản sau sang tiếng Anh tự nhiên, chuẩn xác:\n\n"${text}"\n\nChỉ trả về bản dịch tiếng Anh.`;
-      break;
-    case 'custom':
-      userPrompt = `${customPrompt || 'Hãy viết lại đoạn sau cho hay hơn'}:\n\n"${text}"\n\nChỉ trả về kết quả.`;
+      prompt = `Dịch và trau chuốt đoạn văn sau sang Tiếng Anh tự nhiên, chuẩn người bản xứ:\n\n"${text}"\n\nChỉ trả về văn bản Tiếng Anh.`;
       break;
     case 'exact':
     default:
-      userPrompt = `Sửa lỗi chính tả, thêm dấu chấm câu và viết hoa cho chuẩn xác đoạn văn sau, giữ nguyên toàn bộ từ ngữ gốc:\n\n"${text}"\n\nChỉ trả về đoạn văn đã sửa.`;
+      prompt = `Sửa lỗi chính tả, ngắt câu và thêm dấu câu chuẩn xác cho đoạn văn bản gõ giọng nói sau, không thay đổi nội dung:\n\n"${text}"\n\nChỉ trả về văn bản đã sửa.`;
       break;
   }
 
-  try {
-    const response = await fetchWithRetry((key) => {
-      // 1. Groq (qwen/qwen3.8-27b)
-      if (key.startsWith('gsk_')) {
-        return fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${key}`
-          },
-          body: JSON.stringify({
-            model: 'qwen/qwen3.8-27b',
-            temperature: 0.3,
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: userPrompt }
-            ]
-          })
-        });
-      }
-
-      // 2. OpenAI
-      if (key.startsWith('sk-')) {
-        return fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${key}`
-          },
-          body: JSON.stringify({
-            model: 'gpt-4o-mini',
-            temperature: 0.3,
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: userPrompt }
-            ]
-          })
-        });
-      }
-
-      // 3. Gemini
-      return fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }]
-          }],
-          generationConfig: { temperature: 0.3 }
-        })
-      });
-    });
-
-    const data = await response.json();
-    if (data.choices && data.choices[0]?.message?.content) {
-      return data.choices[0].message.content.trim();
-    }
-    if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
-      return data.candidates[0].content.parts[0].text.trim();
-    }
-    return data.choices?.[0]?.text?.trim() || '';
-  } catch (error) {
-    console.error("Refine API error:", error);
-    throw new Error(error.message || "Lỗi khi xử lý AI.");
-  }
+  return translateText(prompt, 'vi', 'vi');
 }
 
-// Yap AI Chat Assistant
+// 4. TRỢ LÝ AI CHAT
 export async function chatWithAI({ messages }) {
-  try {
-    const response = await fetchWithRetry((key) => {
-      // Groq
-      if (key.startsWith('gsk_')) {
-        return fetch('https://api.groq.com/openai/v1/chat/completions', {
+  const keys = getAllConfiguredKeys();
+  const providers = [];
+
+  // 1. Gemini
+  if (keys.gemini) {
+    providers.push({
+      name: 'Google Gemini Chat',
+      execute: async () => {
+        const contents = messages.map(m => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content }]
+        }));
+
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${keys.gemini}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents, generationConfig: { temperature: 0.7 } })
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error?.message || `Lỗi ${res.status}`);
+        }
+
+        const data = await res.json();
+        return data.candidates?.[0]?.content?.parts?.[0]?.text;
+      }
+    });
+  }
+
+  // 2. Groq
+  if (keys.groq) {
+    providers.push({
+      name: 'Groq AI Chat',
+      execute: async () => {
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${key}`
+            'Authorization': `Bearer ${keys.groq}`
           },
           body: JSON.stringify({
             model: 'qwen/qwen3.8-27b',
-            temperature: 0.5,
-            messages: [
-              { role: 'system', content: 'Bạn là Yap AI - Trợ lý thông minh đa năng, hỗ trợ trả lời câu hỏi, soạn thảo văn bản, tóm tắt và dịch thuật bằng tiếng Việt tự nhiên và hữu ích.' },
-              ...messages
-            ]
+            messages,
+            temperature: 0.7
           })
         });
-      }
 
-      // OpenAI
-      if (key.startsWith('sk-')) {
-        return fetch('https://api.openai.com/v1/chat/completions', {
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error?.message || `Lỗi ${res.status}`);
+        }
+
+        const data = await res.json();
+        return data.choices?.[0]?.message?.content;
+      }
+    });
+  }
+
+  // 3. OpenRouter
+  if (keys.openrouter) {
+    providers.push({
+      name: 'OpenRouter Chat',
+      execute: async () => {
+        const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${key}`
+            'Authorization': `Bearer ${keys.openrouter}`
+          },
+          body: JSON.stringify({
+            model: 'deepseek/deepseek-chat:free',
+            messages,
+            temperature: 0.7
+          })
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error?.message || `Lỗi ${res.status}`);
+        }
+
+        const data = await res.json();
+        return data.choices?.[0]?.message?.content;
+      }
+    });
+  }
+
+  // 4. OpenAI
+  if (keys.openai) {
+    providers.push({
+      name: 'OpenAI Chat',
+      execute: async () => {
+        const res = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${keys.openai}`
           },
           body: JSON.stringify({
             model: 'gpt-4o-mini',
-            temperature: 0.5,
-            messages: [
-              { role: 'system', content: 'Bạn là Yap AI - Trợ lý thông minh đa năng bằng tiếng Việt.' },
-              ...messages
-            ]
+            messages,
+            temperature: 0.7
           })
         });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error?.message || `Lỗi ${res.status}`);
+        }
+
+        const data = await res.json();
+        return data.choices?.[0]?.message?.content;
       }
-
-      // Gemini
-      const contents = messages.map(m => ({
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }]
-      }));
-
-      return fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          systemInstruction: {
-            parts: [{ text: 'Bạn là Yap AI - Trợ lý thông minh đa năng bằng tiếng Việt.' }]
-          },
-          contents,
-          generationConfig: { temperature: 0.5 }
-        })
-      });
     });
-
-    const data = await response.json();
-    if (data.choices && data.choices[0]?.message?.content) {
-      return data.choices[0].message.content.trim();
-    }
-    if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
-      return data.candidates[0].content.parts[0].text.trim();
-    }
-    return '';
-  } catch (error) {
-    console.error("Chat API error:", error);
-    throw new Error(error.message || "Lỗi khi trò chuyện với AI.");
   }
-}
 
-export async function transcribeAndTranslateAudio({ base64Audio, mimeType, sourceLang, targetLang }) {
-  try {
-    const response = await fetchWithRetry((key) => {
-      // 1. Groq
-      if (key.startsWith('gsk_')) {
-        const blobToUse = new Blob([Uint8Array.from(atob(base64Audio), c => c.charCodeAt(0))], { type: mimeType || 'audio/webm' });
-        const formData = new FormData();
-        formData.append('file', new File([blobToUse], 'audio.webm', { type: mimeType || 'audio/webm' }));
-        formData.append('model', 'whisper-large-v3-turbo');
-        formData.append('response_format', 'json');
-
-        return fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${key}` },
-          body: formData
-        });
-      }
-
-      // 2. Gemini
-      return fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: `You are an expert bilingual transcriber and translator. Listen to the audio.
-1. Identify if the audio is spoken in ${sourceLang} or ${targetLang}.
-2. Transcribe the original speech exactly in the identified language.
-3. Translate it accurately to the OTHER language.
-Return ONLY a valid JSON object in this exact format, with no markdown code blocks:
-{"transcript": "original text here", "translation": "translated text here"}`
-            }, {
-              inlineData: {
-                mimeType: mimeType || 'audio/webm',
-                data: base64Audio
-              }
-            }]
-          }],
-          generationConfig: {
-            temperature: 0.1,
-            responseMimeType: "application/json"
-          }
-        })
-      });
-    });
-
-    const data = await response.json();
-    if (data.text) {
-      // Whisper returns transcript -> translate it with translateText
-      const transcript = data.text.trim();
-      const translation = await translateText({ text: transcript, sourceLanguage: sourceLang, targetLanguage: targetLang });
-      return { transcript, translation };
-    }
-    const resultText = data.candidates[0].content.parts[0].text.trim();
-    return JSON.parse(resultText); // { transcript, translation }
-  } catch (error) {
-    console.error("Transcription API error:", error);
-    throw new Error(error.message || "Lỗi khi xử lý âm thanh.");
-  }
+  return executeWithAutoFailover('Trợ Lý AI', providers);
 }
