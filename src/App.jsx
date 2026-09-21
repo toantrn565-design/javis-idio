@@ -9,12 +9,14 @@ import AiChat from './components/AiChat';
 import History from './components/History';
 import SettingsScreen from './components/Settings';
 import MiniFloatingWidget from './components/MiniFloatingWidget';
+import VoiceTypingOverlay from './components/VoiceTypingOverlay';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import ErrorBoundary from './components/ErrorBoundary';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dictate');
   const [isMiniMode, setIsMiniMode] = useState(false);
+  const [showVoiceOverlay, setShowVoiceOverlay] = useState(false);
   const [history, setHistory] = useLocalStorage('yap-history', []);
   const [settings, setSettings] = useLocalStorage('yap-settings', {
     defaultPair: 'vi-en',
@@ -23,6 +25,9 @@ export default function App() {
     autoCopy: true,
     defaultRefineMode: 'exact',
     saveHistory: true,
+    voiceTypingHotkey: 'F8',
+    autoPasteToActiveWindow: true,
+    voiceTypingRefine: true
   });
 
   const toggleMiniMode = (targetValue) => {
@@ -37,10 +42,17 @@ export default function App() {
   };
 
   useEffect(() => {
-    // Lắng nghe phím tắt Alt+Z từ Electron
+    // 1. Lắng nghe phím tắt Alt+Z từ Electron
     if (typeof window !== 'undefined' && window.electronAPI?.onToggleMiniShortcut) {
       window.electronAPI.onToggleMiniShortcut((isMini) => {
         setIsMiniMode(isMini);
+      });
+    }
+
+    // 2. Lắng nghe phím tắt gõ giọng nói toàn hệ thống (F8 hoặc custom key)
+    if (typeof window !== 'undefined' && window.electronAPI?.onTriggerVoiceTyping) {
+      window.electronAPI.onTriggerVoiceTyping(() => {
+        setShowVoiceOverlay(prev => !prev);
       });
     }
 
@@ -113,6 +125,10 @@ export default function App() {
             } 
           }} 
         />
+
+        {showVoiceOverlay && (
+          <VoiceTypingOverlay settings={settings} onClose={() => setShowVoiceOverlay(false)} />
+        )}
 
         <Header isMiniMode={isMiniMode} onToggleMiniMode={() => toggleMiniMode()} />
 

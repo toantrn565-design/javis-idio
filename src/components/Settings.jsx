@@ -11,6 +11,9 @@ export default function Settings({ settings, setSettings }) {
     openrouterApiKey: settings.openrouterApiKey || '',
     openaiApiKey: settings.openaiApiKey || '',
     geminiPaidApiKey: settings.geminiPaidApiKey || '',
+    voiceTypingHotkey: settings.voiceTypingHotkey || 'F8',
+    autoPasteToActiveWindow: settings.autoPasteToActiveWindow !== false,
+    voiceTypingRefine: settings.voiceTypingRefine !== false,
     autoCopy: settings.autoCopy !== false,
     defaultRefineMode: settings.defaultRefineMode || 'exact',
     defaultPair: settings.defaultPair || 'vi-en',
@@ -113,8 +116,16 @@ export default function Settings({ settings, setSettings }) {
     localStorage.setItem('yap-settings', JSON.stringify(dataToSave));
     localStorage.setItem('igren-settings', JSON.stringify(dataToSave));
 
+    // Cập nhật phím tắt toàn hệ thống cho Electron
+    if (typeof window !== 'undefined' && window.electronAPI?.updateVoiceHotkey) {
+      window.electronAPI.updateVoiceHotkey({
+        hotkey: formData.voiceTypingHotkey || 'F8',
+        autoPaste: formData.autoPasteToActiveWindow !== false
+      });
+    }
+
     setSaved(true);
-    toast.success('Đã lưu cấu hình xoay vòng API thành công!', { icon: '✅' });
+    toast.success('Đã lưu cấu hình & Cập nhật phím tắt giọng nói thành công!', { icon: '✅' });
     setTimeout(() => setSaved(false), 3000);
   };
 
@@ -367,7 +378,94 @@ export default function Settings({ settings, setSettings }) {
         </div>
       </div>
 
-      {/* 6. TÙY CHỌN TỰ ĐỘNG HÓA */}
+      {/* 6. BÀN PHÍM GIỌNG NÓI TOÀN HỆ THỐNG (GLOBAL VOICE-TO-TEXT HOTKEY) */}
+      <div className="bg-gradient-to-br from-[#0f172a]/95 via-[#131f37]/90 to-[#0b1329] backdrop-blur-xl rounded-3xl p-4 sm:p-5 border border-cyan-500/30 shadow-2xl space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 font-black text-sm text-white font-['Outfit']">
+            <div className="p-1.5 rounded-xl bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+              <Zap className="w-4 h-4" />
+            </div>
+            <span>Bàn Phím Giọng Nói Toàn Hệ Thống (Thay Phím Gõ Ngầm)</span>
+          </div>
+
+          <span className="text-[10px] bg-cyan-500/20 text-cyan-300 font-extrabold px-2.5 py-0.5 rounded-full border border-cyan-500/30">
+            NÓI &rarr; TỰ GÕ VÀO CON TRỎ
+          </span>
+        </div>
+
+        <p className="text-xs text-slate-300 leading-relaxed">
+          Đang ở bất kỳ phần mềm nào (<strong>Word, Zalo, Excel, Trình duyệt Web, Game, Chat...</strong>), anh chỉ cần bấm phím tắt này &rarr; Nói tiếng Việt &rarr; AI tự động sửa chính tả và <strong>GÕ TRỰC TIẾP VÀO CON TRỎ CHUỘT</strong> mà không cần mở app hay bấm Ctrl+V.
+        </p>
+
+        {/* Hotkey Selector */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+          <div>
+            <label className="block text-xs font-bold text-slate-300 mb-1.5">Phím tắt kích hoạt giọng nói (Hotkey)</label>
+            <div className="flex items-center gap-2">
+              <select
+                value={formData.voiceTypingHotkey}
+                onChange={(e) => handleChange('voiceTypingHotkey', e.target.value)}
+                className="flex-1 bg-[#1e293b]/90 border border-white/10 text-cyan-300 font-bold font-mono rounded-2xl p-2.5 text-xs focus:ring-2 focus:ring-cyan-400 outline-none cursor-pointer"
+              >
+                <option value="F8" className="bg-slate-900 text-white">F8 (Khuyên dùng - Nhanh nhất)</option>
+                <option value="F9" className="bg-slate-900 text-white">F9</option>
+                <option value="F7" className="bg-slate-900 text-white">F7</option>
+                <option value="F10" className="bg-slate-900 text-white">F10</option>
+                <option value="Alt+Space" className="bg-slate-900 text-white">Alt + Space</option>
+                <option value="Alt+Q" className="bg-slate-900 text-white">Alt + Q</option>
+                <option value="Ctrl+Space" className="bg-slate-900 text-white">Ctrl + Space</option>
+                <option value="Alt+Z" className="bg-slate-900 text-white">Alt + Z (Ghim Mini Zalo)</option>
+              </select>
+
+              <input
+                type="text"
+                value={formData.voiceTypingHotkey}
+                onChange={(e) => handleChange('voiceTypingHotkey', e.target.value)}
+                placeholder="Tự gõ phím..."
+                className="w-28 bg-[#1e293b]/90 border border-white/10 text-center text-white font-mono font-bold rounded-2xl p-2.5 text-xs focus:ring-2 focus:ring-cyan-400 outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2.5 pt-1 sm:pt-4">
+            {/* Auto Paste Toggle */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-xs font-bold text-slate-200">Tự động dán vào con trỏ chuột</h4>
+                <p className="text-[10px] text-slate-400">Nói xong tự điền ngay vào vị trí gõ</p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="sr-only peer"
+                  checked={formData.autoPasteToActiveWindow}
+                  onChange={(e) => handleChange('autoPasteToActiveWindow', e.target.checked)}
+                />
+                <div className="w-10 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-500 border border-white/10"></div>
+              </label>
+            </div>
+
+            {/* AI Refine Toggle */}
+            <div className="flex items-center justify-between pt-2 border-t border-white/5">
+              <div>
+                <h4 className="text-xs font-bold text-slate-200">AI tự sửa lỗi chính tả & dấu câu</h4>
+                <p className="text-[10px] text-slate-400">Chuẩn hóa câu từ trước khi gõ</p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="sr-only peer"
+                  checked={formData.voiceTypingRefine}
+                  onChange={(e) => handleChange('voiceTypingRefine', e.target.checked)}
+                />
+                <div className="w-10 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500 border border-white/10"></div>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 7. TÙY CHỌN TỰ ĐỘNG HÓA */}
       <div className="bg-[#0f172a]/90 backdrop-blur-xl rounded-3xl p-4 sm:p-5 border border-white/[0.08] shadow-xl space-y-4">
         <div className="flex items-center gap-2 text-sm font-black text-white font-['Outfit']">
           <Wand2 className="w-4 h-4 text-emerald-400" /> Tùy Chọn Đàm Thoại & Dịch Thuật

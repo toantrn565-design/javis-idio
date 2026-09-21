@@ -1,8 +1,12 @@
-const { app, BrowserWindow, session, globalShortcut, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, session, globalShortcut, ipcMain, screen, clipboard } = require('electron');
 const path = require('path');
+const { exec } = require('child_process');
 
 let mainWindow;
 let isMiniMode = false;
+let currentVoiceHotkey = 'F8';
+let autoPasteEnabled = true;
+
 const NORMAL_SIZE = { width: 940, height: 800 };
 const MINI_SIZE = { width: 480, height: 260 };
 
@@ -60,6 +64,52 @@ function setMiniMode(enabled) {
   }
 }
 
+// Hàm gõ thẳng vào con trỏ chuột của ứng dụng đang mở (Word, Zalo, Excel...)
+function pasteToActiveWindow(text) {
+  if (text) {
+    clipboard.writeText(text);
+  }
+
+  // Tạm ẩn hoặc chuyển focus về app trước đó rồi bấm Ctrl+V
+  if (mainWindow && !isMiniMode) {
+    mainWindow.minimize();
+  }
+
+  setTimeout(() => {
+    // Kích hoạt phím tắt Ctrl+V qua PowerShell WScript / SendKeys
+    const psScript = `powershell -ExecutionPolicy Bypass -Command "$ws = New-Object -ComObject WScript.Shell; Start-Sleep -Milliseconds 80; $ws.SendKeys('^v')"`;
+    exec(psScript, (err) => {
+      if (err) console.error('Auto-paste error:', err);
+    });
+  }, 120);
+}
+
+// Đăng ký lại phím tắt gõ giọng nói toàn hệ thống
+function registerVoiceShortcut(hotkey) {
+  if (currentVoiceHotkey) {
+    try {
+      globalShortcut.unregister(currentVoiceHotkey);
+    } catch (e) {}
+  }
+
+  currentVoiceHotkey = hotkey || 'F8';
+
+  try {
+    const success = globalShortcut.register(currentVoiceHotkey, () => {
+      if (mainWindow) {
+        if (!mainWindow.isVisible()) {
+          mainWindow.show();
+        }
+        mainWindow.webContents.send('trigger-voice-typing');
+      }
+    });
+
+    console.log(`[Voice Typing Hotkey] Đã đăng ký phím: ${currentVoiceHotkey} (Thành công: ${success})`);
+  } catch (err) {
+    console.error(`Lỗi đăng ký phím tắt ${currentVoiceHotkey}:`, err);
+  }
+}
+
 app.on('ready', () => {
   createWindow();
 
@@ -74,9 +124,26 @@ app.on('ready', () => {
     }
   });
 
-  // Đăng ký phím tắt toàn hệ thống:
-  // 1. Alt + Space: Mở / Ẩn nhanh JAVIS Idio
-  // 2. Alt + Z: Bật / Tắt chế độ Cửa sổ Mini Ghim Nổi Zalo (Always On Top)
+  ipcMain.on('update-voice-hotkey', (event, config) => {
+    if (config?.hotkey) {
+      registerVoiceShortcut(config.hotkey);
+    }
+    if (typeof config?.autoPaste === 'boolean') {
+      autoPasteEnabled = config.autoPaste;
+    }
+  });
+
+  ipcMain.on('paste-to-active-window', (event, text) => {
+    if (autoPasteEnabled) {
+      pasteToActiveWindow(text);
+    }
+  });
+
+  // Đăng ký phím tắt mặc định:
+  // 1. Phím tắt gõ giọng nói tùy chỉnh (Mặc định F8)
+  registerVoiceShortcut('F8');
+
+  // 2. Alt + Space: Mở / Ẩn nhanh JAVIS Idio
   try {
     globalShortcut.register('Alt+Space', () => {
       if (mainWindow) {
@@ -89,6 +156,7 @@ app.on('ready', () => {
       }
     });
 
+    // 3. Alt + Z: Bật / Tắt chế độ Cửa sổ Mini Ghim Nổi Zalo
     globalShortcut.register('Alt+Z', () => {
       if (mainWindow) {
         mainWindow.show();
