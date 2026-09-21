@@ -1,7 +1,7 @@
 {
-  "name": "igren-ai-translator",
+  "name": "yap-ai-translator",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "main": "electron.cjs",
   "homepage": "./",
@@ -11,7 +11,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "desktop": "electron .",
-    "package": "vite build && npx electron-packager . \"IGREN AI Translator\" --platform=win32 --arch=x64 --out=dist-electron --overwrite --ignore=\"(node_modules|src|public|eslint.config.js|vite.config.js|DEPLOY_GUIDE.md|vercel.json)\"",
+    "package": "vite build && npx electron-packager . \"YAP AI Translator Premium\" --platform=win32 --arch=x64 --out=dist-electron --overwrite --ignore=\"(node_modules|src|public|eslint.config.js|vite.config.js|DEPLOY_GUIDE.md|vercel.json)\"",
     "dist-win": "npm run package"
   },
   "dependencies": {
@@ -43,8 +43,8 @@
     "vite-plugin-singlefile": "^2.3.3"
   },
   "build": {
-    "appId": "com.igren.translator",
-    "productName": "IGREN AI Translator",
+    "appId": "com.yap.translator.premium",
+    "productName": "YAP AI Translator Premium",
     "directories": {
       "output": "dist-electron"
     },

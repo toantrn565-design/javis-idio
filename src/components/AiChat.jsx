@@ -14,7 +14,7 @@ export default function AiChat() {
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: 'Chào anh! Em là **Yap AI**. Anh có thể yêu cầu em viết lại văn bản, soạn thảo email, sửa lỗi chính tả, tóm tắt nội dung hoặc giải đáp bất kỳ câu hỏi nào.'
+      content: 'Chào anh! Em là **YAP AI Assistant Premium**. Anh có thể gửi văn bản cần biên tập, soạn thảo email đối tác quốc tế, tóm tắt hợp đồng hoặc giải đáp câu hỏi đa ngữ.'
     }
   ]);
   const [input, setInput] = useState('');
@@ -55,7 +55,7 @@ export default function AiChat() {
   const handleCopy = (content, index) => {
     navigator.clipboard.writeText(content);
     setCopiedIndex(index);
-    toast.success('Đã sao chép!');
+    toast.success('Đã sao chép phản hồi!');
     setTimeout(() => setCopiedIndex(null), 2000);
   };
 
@@ -63,21 +63,21 @@ export default function AiChat() {
     setMessages([
       {
         role: 'assistant',
-        content: 'Chào anh! Em là **Yap AI**. Anh có thể gửi văn bản hoặc yêu cầu bất kỳ để em hỗ trợ.'
+        content: 'Chào anh! Em là **YAP AI Assistant Premium**. Em sẵn sàng hỗ trợ anh.'
       }
     ]);
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-180px)] max-h-[750px] animate-in fade-in duration-300">
+    <div className="flex flex-col h-[calc(100vh-190px)] max-h-[750px] animate-in fade-in duration-300 pb-16">
       {/* Header action */}
-      <div className="flex justify-between items-center pb-2 border-b border-gray-100">
-        <div className="flex items-center gap-1.5 text-xs font-bold text-gray-700">
-          <Sparkles className="w-4 h-4 text-teal-600" /> Trợ lý Yap AI
+      <div className="flex justify-between items-center pb-2.5 border-b border-white/[0.08]">
+        <div className="flex items-center gap-2 text-xs font-black text-white font-['Outfit']">
+          <Sparkles className="w-4 h-4 text-emerald-400" /> Trợ Lý Ngôn Ngữ & Soạn Thảo AI
         </div>
         <button
           onClick={handleClear}
-          className="text-gray-400 hover:text-red-500 text-xs flex items-center gap-1"
+          className="text-slate-400 hover:text-red-400 text-xs flex items-center gap-1 transition-colors"
         >
           <Trash2 className="w-3.5 h-3.5" /> Xóa hội thoại
         </button>
@@ -93,30 +93,30 @@ export default function AiChat() {
               className={`flex gap-2.5 ${isUser ? 'justify-end' : 'justify-start'}`}
             >
               {!isUser && (
-                <div className="w-7 h-7 rounded-full bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                <div className="w-8 h-8 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center shrink-0 shadow-lg shadow-emerald-500/20 border border-emerald-400/30">
                   <Bot className="w-4 h-4" />
                 </div>
               )}
               <div
-                className={`group relative max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-sm ${
+                className={`group relative max-w-[85%] rounded-3xl px-4 py-3 text-sm leading-relaxed shadow-xl ${
                   isUser
-                    ? 'bg-teal-600 text-white rounded-br-none'
-                    : 'bg-white text-gray-800 border border-gray-100 rounded-bl-none'
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-br-none'
+                    : 'bg-[#0f172a]/90 backdrop-blur-xl text-slate-100 border border-white/[0.08] rounded-bl-none'
                 }`}
               >
                 <div className="whitespace-pre-wrap">{m.content}</div>
                 {!isUser && (
                   <button
                     onClick={() => handleCopy(m.content, idx)}
-                    className="mt-1.5 pt-1.5 border-t border-gray-100 w-full flex items-center justify-end gap-1 text-[11px] text-gray-400 hover:text-teal-600 font-medium"
+                    className="mt-2 pt-2 border-t border-white/[0.08] w-full flex items-center justify-end gap-1 text-[11px] text-slate-400 hover:text-emerald-400 font-bold transition-colors"
                   >
-                    {copiedIndex === idx ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                    {copiedIndex === idx ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                     <span>{copiedIndex === idx ? 'Đã sao chép' : 'Sao chép'}</span>
                   </button>
                 )}
               </div>
               {isUser && (
-                <div className="w-7 h-7 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 rounded-2xl bg-slate-800 text-slate-300 border border-white/10 flex items-center justify-center shrink-0">
                   <User className="w-4 h-4" />
                 </div>
               )}
@@ -126,11 +126,11 @@ export default function AiChat() {
 
         {loading && (
           <div className="flex gap-2.5 justify-start items-center">
-            <div className="w-7 h-7 rounded-full bg-teal-600 text-white flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
               <Bot className="w-4 h-4" />
             </div>
-            <div className="bg-white rounded-2xl px-4 py-2.5 shadow-sm border border-gray-100 flex items-center gap-1.5 text-xs text-gray-500">
-              <RefreshCw className="w-3.5 h-3.5 animate-spin text-teal-600" /> Yap AI đang suy nghĩ...
+            <div className="bg-[#0f172a]/90 backdrop-blur-xl rounded-3xl px-4 py-2.5 shadow-xl border border-white/[0.08] flex items-center gap-2 text-xs text-slate-300">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" /> YAP AI đang phân tích & soạn thảo...
             </div>
           </div>
         )}
@@ -144,7 +144,7 @@ export default function AiChat() {
             <button
               key={i}
               onClick={() => handleSend(prompt)}
-              className="shrink-0 text-[11px] bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 py-1 px-2.5 rounded-full shadow-xs"
+              className="shrink-0 text-[11px] bg-slate-800/80 hover:bg-slate-700/80 border border-white/10 text-slate-300 hover:text-white py-1.5 px-3 rounded-full shadow transition-all"
             >
               {prompt}
             </button>
@@ -159,22 +159,22 @@ export default function AiChat() {
             e.preventDefault();
             handleSend();
           }}
-          className="flex gap-2 items-center bg-white rounded-2xl p-1.5 pl-3.5 shadow-sm border border-gray-200 focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-500/20 transition-all"
+          className="flex gap-2 items-center bg-[#0f172a]/90 backdrop-blur-xl rounded-3xl p-1.5 pl-4 shadow-2xl border border-white/[0.1] focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all"
         >
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Hỏi hoặc nhập văn bản cho Yap AI..."
-            className="flex-1 bg-transparent border-0 outline-none text-sm text-gray-800 placeholder-gray-400"
+            placeholder="Nhập câu hỏi, văn bản hoặc yêu cầu cho YAP AI..."
+            className="flex-1 bg-transparent border-0 outline-none text-xs sm:text-sm text-white placeholder-slate-500"
           />
           <button
             type="submit"
             disabled={!input.trim() || loading}
-            className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+            className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all ${
               input.trim() && !loading
-                ? 'bg-teal-600 text-white shadow-sm hover:bg-teal-700'
-                : 'bg-gray-100 text-gray-400'
+                ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-500/25 active:scale-95'
+                : 'bg-slate-800 text-slate-500'
             }`}
           >
             <Send className="w-4 h-4" />

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Mic, MicOff, Copy, Share2, Volume2, Sparkles, RefreshCw, Check, ArrowRight, Wand2, FileText, Briefcase, MessageSquare, Globe } from 'lucide-react';
+import { Mic, MicOff, Copy, Share2, Volume2, Sparkles, RefreshCw, Check, ArrowRight, Wand2, FileText, Briefcase, MessageSquare, Globe, Trash2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { transcribeAudioOnly, refineTextWithAI } from '../services/translateService';
 import { useSpeechSynthesis } from '../hooks/useSpeechSynthesis';
@@ -81,7 +81,7 @@ export default function VoiceDictation({ history, setHistory, settings }) {
               });
 
               if (!text || !text.trim()) {
-                toast.error('Không nghe thấy giọng nói hoặc âm thanh quá nhỏ.');
+                toast.error('Không nghe rõ giọng nói hoặc âm thanh quá nhỏ.');
                 setIsProcessing(false);
                 return;
               }
@@ -94,16 +94,16 @@ export default function VoiceDictation({ history, setHistory, settings }) {
               setRefinedText(finalOutput);
 
               // 3. Tự động sao chép nếu bật trong cài đặt
-              if (settings?.autoCopy) {
+              if (settings?.autoCopy !== false) {
                 await navigator.clipboard.writeText(finalOutput).catch(() => {});
                 setCopied(true);
-                toast.success('Đã nhận diện & tự động sao chép!');
+                toast.success('Đã nhận diện & tự động sao chép!', { icon: '📋' });
               } else {
                 toast.success('Đã nhận diện thành công!');
               }
 
               // 4. Lưu lịch sử
-              if (settings?.saveHistory !== false) {
+              if (setHistory && settings?.saveHistory !== false) {
                 const newEntry = {
                   id: Date.now(),
                   type: 'dictation',
@@ -155,7 +155,7 @@ export default function VoiceDictation({ history, setHistory, settings }) {
     try {
       const result = await refineTextWithAI({ text: rawText, mode: modeId });
       setRefinedText(result || rawText);
-      toast.success(`Đã chuyển sang chế độ: ${REFINE_MODES.find(m => m.id === modeId)?.name}`);
+      toast.success(`Đã chuyển sang: ${REFINE_MODES.find(m => m.id === modeId)?.name}`);
     } catch (err) {
       toast.error(err.message || 'Lỗi xử lý AI.');
     } finally {
@@ -179,11 +179,11 @@ export default function VoiceDictation({ history, setHistory, settings }) {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: 'Yap Voice Note',
+          title: 'YAP AI Voice Note',
           text: textToShare,
         });
       } catch (err) {
-        // User cancelled share
+        // Cancelled
       }
     } else {
       handleCopy();
@@ -213,13 +213,13 @@ export default function VoiceDictation({ history, setHistory, settings }) {
   };
 
   return (
-    <div className="space-y-4 animate-in fade-in duration-300 pb-4">
-      {/* Refine Mode Selector */}
-      <div className="bg-white rounded-2xl p-2.5 shadow-sm border border-gray-100">
-        <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2 px-1 flex items-center gap-1">
-          <Wand2 className="w-3.5 h-3.5 text-teal-600" /> Chế độ xử lý giọng nói AI:
+    <div className="space-y-4 animate-in fade-in duration-300 pb-16">
+      {/* 1. Refine Mode Selector */}
+      <div className="bg-[#0f172a]/90 backdrop-blur-xl rounded-3xl p-3.5 border border-white/[0.08] shadow-xl">
+        <div className="text-[10px] font-extrabold text-emerald-400 uppercase tracking-wider mb-2.5 px-1 flex items-center gap-1.5">
+          <Wand2 className="w-3.5 h-3.5 text-emerald-400" /> Chế độ AI Chuẩn Hóa Văn Bản:
         </div>
-        <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
           {REFINE_MODES.map((mode) => {
             const Icon = mode.icon;
             const isSelected = activeMode === mode.id;
@@ -227,80 +227,87 @@ export default function VoiceDictation({ history, setHistory, settings }) {
               <button
                 key={mode.id}
                 onClick={() => handleModeChange(mode.id)}
-                className={`flex flex-col items-center py-2 px-1 rounded-xl text-xs font-medium transition-all ${
+                className={`flex flex-col items-center py-2.5 px-1.5 rounded-2xl text-xs font-bold transition-all duration-300 ${
                   isSelected
-                    ? 'bg-teal-600 text-white shadow-sm ring-2 ring-teal-600/30'
-                    : 'bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-100'
+                    ? 'bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/30 scale-102 border border-emerald-400/40'
+                    : 'bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 border border-white/[0.06]'
                 }`}
               >
-                <Icon className={`w-4 h-4 mb-1 ${isSelected ? 'text-white' : 'text-teal-600'}`} />
-                <span className="truncate w-full text-center">{mode.name}</span>
+                <Icon className={`w-4 h-4 mb-1.5 ${isSelected ? 'text-white' : 'text-emerald-400'}`} />
+                <span className="truncate w-full text-center text-[11px]">{mode.name}</span>
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* Main Microphone Action Area */}
-      <div className="bg-gradient-to-b from-white to-gray-50 rounded-3xl p-6 shadow-sm border border-gray-100 text-center flex flex-col items-center justify-center min-h-[220px] relative overflow-hidden">
+      {/* 2. Studio Microphone Action Area */}
+      <div className="bg-[#0f172a]/80 backdrop-blur-2xl rounded-3xl p-8 border border-white/[0.08] shadow-2xl text-center flex flex-col items-center justify-center min-h-[260px] relative overflow-hidden">
         {isRecording && (
-          <div className="absolute inset-0 bg-red-500/5 flex items-center justify-center pointer-events-none">
-            <div className="w-48 h-48 rounded-full bg-red-500/10 animate-ping" />
+          <div className="absolute inset-0 bg-red-500/10 flex items-center justify-center pointer-events-none">
+            <div className="w-56 h-56 rounded-full bg-red-500/20 animate-ping" />
           </div>
         )}
 
-        {/* Big Record Button */}
-        <button
-          onClick={isRecording ? stopRecording : startRecording}
-          disabled={isProcessing}
-          className={`relative w-24 h-24 rounded-full flex flex-col items-center justify-center transition-all duration-300 shadow-xl active:scale-95 ${
-            isRecording
-              ? 'bg-red-500 text-white ring-8 ring-red-200 animate-pulse'
-              : isProcessing
-              ? 'bg-amber-500 text-white cursor-wait'
-              : 'bg-gradient-to-tr from-teal-600 to-emerald-500 text-white hover:shadow-teal-500/25 hover:scale-105'
-          }`}
-        >
-          {isRecording ? (
-            <>
-              <MicOff className="w-9 h-9 animate-bounce" />
-              <span className="text-[11px] font-bold mt-1 font-mono">{formatSeconds(recordingSeconds)}</span>
-            </>
-          ) : isProcessing ? (
-            <>
-              <RefreshCw className="w-8 h-8 animate-spin" />
-              <span className="text-[10px] font-medium mt-1">Đang xử lý</span>
-            </>
-          ) : (
-            <>
-              <Mic className="w-10 h-10" />
-              <span className="text-[11px] font-bold mt-1 tracking-wide">NÓI</span>
-            </>
+        {/* Ambient Ring */}
+        <div className="relative">
+          {!isRecording && !isProcessing && (
+            <div className="absolute -inset-4 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 blur-md opacity-30 animate-pulse"></div>
           )}
-        </button>
 
-        <p className="text-xs text-gray-500 mt-4 font-medium">
+          {/* Big Record Button */}
+          <button
+            onClick={isRecording ? stopRecording : startRecording}
+            disabled={isProcessing}
+            className={`relative w-28 h-28 rounded-full flex flex-col items-center justify-center transition-all duration-300 shadow-2xl active:scale-95 z-10 ${
+              isRecording
+                ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white ring-8 ring-red-500/30 animate-pulse'
+                : isProcessing
+                ? 'bg-gradient-to-r from-amber-500 to-yellow-600 text-white cursor-wait'
+                : 'bg-gradient-to-tr from-emerald-500 via-teal-500 to-cyan-500 text-white hover:scale-105 shadow-[0_0_35px_rgba(16,185,129,0.4)]'
+            }`}
+          >
+            {isRecording ? (
+              <>
+                <MicOff className="w-10 h-10 animate-bounce" />
+                <span className="text-xs font-black mt-1 font-mono tracking-wider">{formatSeconds(recordingSeconds)}</span>
+              </>
+            ) : isProcessing ? (
+              <>
+                <RefreshCw className="w-9 h-9 animate-spin" />
+                <span className="text-[10px] font-extrabold mt-1">AI Đang Xử Lý</span>
+              </>
+            ) : (
+              <>
+                <Mic className="w-11 h-11 drop-shadow" />
+                <span className="text-xs font-black mt-1 tracking-wider uppercase font-['Outfit']">CHẠM ĐỂ NÓI</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        <p className="text-xs sm:text-sm text-slate-400 mt-5 font-medium max-w-xs">
           {isRecording
-            ? 'Đang lắng nghe... Bấm nút đỏ khi nói xong'
+            ? '🔴 Đang lắng nghe giọng nói... Chạm lại để hoàn tất'
             : isProcessing
-            ? 'AI đang chuyển đổi giọng nói & chuẩn hóa văn bản...'
-            : 'Chạm để bắt đầu nói tiếng Việt'}
+            ? '⚡ AI đang chuyển đổi giọng nói & chuẩn hóa văn bản...'
+            : 'Chạm để nói tiếng Việt tự nhiên (AI tự sửa chính tả & thêm dấu câu)'}
         </p>
       </div>
 
-      {/* Output / Result Card */}
+      {/* 3. Output / Result Glass Card */}
       {(refinedText || rawText || isProcessing) && (
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-3 animate-in slide-in-from-bottom-2 duration-300">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-gray-700">
-              <Sparkles className="w-4 h-4 text-teal-600" />
-              Kết quả chuẩn hóa ({REFINE_MODES.find(m => m.id === activeMode)?.name}):
+        <div className="bg-[#0f172a]/90 backdrop-blur-xl rounded-3xl p-4 sm:p-5 border border-white/[0.08] shadow-2xl space-y-3 animate-in slide-in-from-bottom-2 duration-300">
+          <div className="flex items-center justify-between border-b border-white/[0.08] pb-2.5">
+            <div className="flex items-center gap-2 text-xs font-extrabold text-emerald-400 font-['Outfit']">
+              <Sparkles className="w-4 h-4 text-emerald-400" />
+              <span>Kết quả chuẩn hóa ({REFINE_MODES.find(m => m.id === activeMode)?.name}):</span>
             </div>
             <button
               onClick={handleClear}
-              className="text-gray-400 hover:text-red-500 text-xs flex items-center gap-1"
+              className="text-slate-400 hover:text-red-400 text-xs flex items-center gap-1 transition-colors"
             >
-              <RefreshCw className="w-3 h-3" /> Xóa
+              <Trash2 className="w-3.5 h-3.5" /> Xóa
             </button>
           </div>
 
@@ -308,47 +315,47 @@ export default function VoiceDictation({ history, setHistory, settings }) {
             value={refinedText || rawText}
             onChange={(e) => setRefinedText(e.target.value)}
             rows={4}
-            className="w-full text-sm text-gray-800 bg-transparent border-0 focus:ring-0 p-0 resize-none font-sans leading-relaxed outline-none"
+            className="w-full text-base sm:text-lg text-slate-100 bg-transparent border-0 focus:ring-0 p-0 resize-none font-sans leading-relaxed outline-none"
             placeholder="Kết quả văn bản sẽ hiển thị ở đây..."
           />
 
           {rawText && refinedText !== rawText && (
-            <div className="bg-gray-50 p-2.5 rounded-xl border border-gray-100 text-xs text-gray-500">
-              <div className="font-semibold text-gray-600 mb-1">Gốc từ giọng nói:</div>
-              <p className="italic">{rawText}</p>
+            <div className="bg-slate-900/80 p-3 rounded-2xl border border-white/[0.06] text-xs text-slate-400">
+              <div className="font-semibold text-slate-300 mb-0.5">Gốc từ giọng nói:</div>
+              <p className="italic text-slate-400 font-mono">"{rawText}"</p>
             </div>
           )}
 
           {/* Action Buttons */}
-          <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100">
+          <div className="flex flex-wrap gap-2 pt-2.5 border-t border-white/[0.08]">
             <button
               onClick={handleCopy}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-semibold transition-all ${
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-2xl text-xs font-black transition-all shadow-lg active:scale-95 ${
                 copied
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'bg-teal-600 text-white hover:bg-teal-700 shadow-sm shadow-teal-600/20'
+                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-emerald-600/30'
+                  : 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white shadow-emerald-500/25'
               }`}
             >
               {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-              {copied ? 'Đã sao chép!' : 'Sao chép'}
+              <span>{copied ? 'ĐÃ SAO CHÉP!' : 'SAO CHÉP'}</span>
             </button>
 
             <button
               onClick={handleShare}
-              className="flex items-center justify-center gap-1 py-2.5 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-semibold transition-colors"
+              className="flex items-center justify-center gap-1.5 py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10 rounded-2xl text-xs font-bold transition-all active:scale-95"
               title="Gửi sang Zalo / Messenger"
             >
-              <Share2 className="w-4 h-4" />
-              <span>Gửi</span>
+              <Share2 className="w-4 h-4 text-emerald-400" />
+              <span>Gửi Zalo</span>
             </button>
 
             <button
               onClick={handleSpeak}
-              className="flex items-center justify-center gap-1 py-2.5 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-semibold transition-colors"
+              className="flex items-center justify-center gap-1.5 py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10 rounded-2xl text-xs font-bold transition-all active:scale-95"
               title="Đọc phát âm"
             >
-              <Volume2 className={`w-4 h-4 ${isSpeaking ? 'text-teal-600 animate-pulse' : ''}`} />
-              <span>Đọc</span>
+              <Volume2 className={`w-4 h-4 ${isSpeaking ? 'text-emerald-400 animate-pulse' : 'text-slate-400'}`} />
+              <span>Nghe</span>
             </button>
           </div>
         </div>
