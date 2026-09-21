@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { LANGUAGE_PAIRS } from '../constants/languages';
 import { Key, Wand2, CheckCircle2, Eye, EyeOff, Save, Sparkles, Zap, Bot, Activity, ShieldCheck, RefreshCw, ExternalLink, Globe, Crown } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { callGeminiContent, callGroqChat, callOpenRouterChat, GEMINI_FREE_MODELS, GEMINI_PAID_MODELS } from '../services/translateService';
+import { callGeminiContent, callGroqChat, callOpenRouterChat, getAvailableGeminiModels, GEMINI_FREE_MODELS, GEMINI_PAID_MODELS } from '../services/translateService';
 
 export default function Settings({ settings, setSettings }) {
   const [formData, setFormData] = useState({
@@ -43,7 +43,7 @@ export default function Settings({ settings, setSettings }) {
 
   // Kiểm tra từng API Key trực tiếp
   const handleTestKey = async (provider) => {
-    setTestingStatus(prev => ({ ...prev, [provider]: 'testing' }));
+    setTestingStatus(prev => ({ ...prev, [provider]: 'Đang test...' }));
     const start = performance.now();
 
     try {
@@ -51,7 +51,7 @@ export default function Settings({ settings, setSettings }) {
         const key = formData.geminiApiKey?.trim();
         if (!key) throw new Error('Vui lòng nhập khóa Gemini Free trước khi test');
         
-        await callGeminiContent(key, { contents: [{ parts: [{ text: 'Ping' }] }] }, GEMINI_FREE_MODELS);
+        await callGeminiContent(key, { contents: [{ parts: [{ text: 'Ping' }] }] }, 'free');
         const elapsed = ((performance.now() - start) / 1000).toFixed(2);
         toast.success(`Google Gemini Free hoạt động tốt (${elapsed}s)!`, { icon: '✨' });
         setTestingStatus(prev => ({ ...prev, gemini: `${elapsed}s OK` }));
@@ -60,7 +60,7 @@ export default function Settings({ settings, setSettings }) {
         const key = formData.geminiPaidApiKey?.trim();
         if (!key) throw new Error('Vui lòng nhập khóa Gemini Trả Phí trước khi test');
         
-        await callGeminiContent(key, { contents: [{ parts: [{ text: 'Ping' }] }] }, GEMINI_PAID_MODELS);
+        await callGeminiContent(key, { contents: [{ parts: [{ text: 'Ping' }] }] }, 'paid');
         const elapsed = ((performance.now() - start) / 1000).toFixed(2);
         toast.success(`Google Gemini Paid (Pro/Flash) hoạt động cực mạnh (${elapsed}s)!`, { icon: '👑' });
         setTestingStatus(prev => ({ ...prev, geminiPaid: `${elapsed}s OK` }));
@@ -95,11 +95,15 @@ export default function Settings({ settings, setSettings }) {
           setTestingStatus(prev => ({ ...prev, openai: `${elapsed}s OK` }));
         } else {
           const err = await res.json().catch(() => ({}));
-          throw new Error(err.error?.message || `Lỗi HTTP ${res.status}`);
+          const errMsg = err.error?.message || `Lỗi HTTP ${res.status}`;
+          if (errMsg.includes('credits') || errMsg.includes('quota')) {
+            throw new Error(`Tài khoản OpenAI hết số dư ($0 credit). Vui lòng nạp thêm credit tại platform.openai.com`);
+          }
+          throw new Error(errMsg);
         }
       }
     } catch (e) {
-      toast.error(`${provider.toUpperCase()} lỗi: ${e.message}`);
+      toast.error(`${provider.toUpperCase()}: ${e.message}`, { duration: 6000 });
       setTestingStatus(prev => ({ ...prev, [provider]: 'Lỗi' }));
     }
   };

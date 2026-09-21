@@ -2,88 +2,81 @@
 // Hỗ trợ cả Google Gemini Trả Phí (Pay-as-you-go), Gemini Free, Groq, OpenRouter, OpenAI
 
 export const GEMINI_FREE_MODELS = [
-  'gemini-3.6-flash',
-  'gemini-2.5-flash',
   'gemini-2.0-flash',
   'gemini-1.5-flash',
+  'gemini-2.0-flash-lite',
   'gemini-1.5-flash-8b',
-  'gemini-1.5-pro'
+  'gemini-1.5-pro',
+  'gemini-pro'
 ];
 
 export const GEMINI_PAID_MODELS = [
-  'gemini-2.5-pro',
-  'gemini-1.5-pro',
-  'gemini-3.6-flash',
   'gemini-2.0-flash',
-  'gemini-1.5-flash'
+  'gemini-1.5-pro',
+  'gemini-1.5-flash',
+  'gemini-2.0-pro-exp-02-05',
+  'gemini-pro'
 ];
 
-export const GROQ_MODELS = [
-  'llama-3.3-70b-versatile',
-  'qwen-2.5-32b',
-  'llama-3.1-8b-instant',
-  'qwen/qwen3.8-27b',
-  'mixtral-8x7b-32768'
-];
+const geminiModelCache = new Map();
 
-export const OPENROUTER_MODELS = [
-  'deepseek/deepseek-chat',
-  'meta-llama/llama-3.3-70b-instruct:free',
-  'mistralai/mistral-7b-instruct:free',
-  'deepseek/deepseek-r1:free'
-];
+// Tự động khám phá danh sách model Google Gemini thực tế khả dụng cho API Key này
+export async function getAvailableGeminiModels(apiKey, tier = 'free') {
+  if (!apiKey) return tier === 'paid' ? GEMINI_PAID_MODELS : GEMINI_FREE_MODELS;
 
-export function getAllConfiguredKeys() {
+  if (geminiModelCache.has(apiKey)) {
+    const cached = geminiModelCache.get(apiKey);
+    if (cached && cached.length > 0) return cached;
+  }
+
   try {
-    const yapSettings = JSON.parse(localStorage.getItem('yap-settings') || '{}');
-    const igrenSettings = JSON.parse(localStorage.getItem('igren-settings') || '{}');
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.models)) {
+        const available = data.models
+          .filter(m => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
+          .map(m => m.name.replace(/^models\//, ''));
 
-    return {
-      geminiPaid: (yapSettings.geminiPaidApiKey || '').trim(),
-      gemini: (yapSettings.geminiApiKey || igrenSettings.geminiApiKey || '').trim(),
-      groq: (yapSettings.groqApiKey || igrenSettings.groqApiKey || '').trim(),
-      openrouter: (yapSettings.openrouterApiKey || igrenSettings.openrouterApiKey || '').trim(),
-      openai: (yapSettings.openaiApiKey || igrenSettings.openaiApiKey || '').trim(),
-      cohere: (yapSettings.cohereApiKey || igrenSettings.cohereApiKey || '').trim(),
-    };
-  } catch (e) {
-    console.error("Lỗi đọc cấu hình API từ LocalStorage:", e);
-    return {};
-  }
-}
+        if (available.length > 0) {
+          const preferredOrder = tier === 'paid'
+            ? ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-2.0-pro', 'gemini-pro']
+            : ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash-8b', 'gemini-1.5-pro', 'gemini-pro'];
 
-// Hàm thực thi với cơ chế Tự Động Xoay API (Auto-Rotate Failover)
-// Thứ tự ưu tiên: 1. Gemini Paid -> 2. Gemini Free -> 3. Groq -> 4. OpenRouter -> 5. OpenAI
-async function executeWithAutoFailover(taskName, providers) {
-  const errors = [];
+          const sorted = [];
+          for (const pref of preferredOrder) {
+            const matches = available.filter(m => m === pref || m.startsWith(pref));
+            for (const m of matches) {
+              if (!sorted.includes(m)) sorted.push(m);
+            }
+          }
+          for (const m of available) {
+            if (!sorted.includes(m)) sorted.push(m);
+          }
 
-  for (const { name, execute } of providers) {
-    try {
-      const result = await Promise.race([
-        execute(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout quá 12 giây')), 12000))
-      ]);
-
-      if (result && typeof result === 'string' && result.trim()) {
-        return result.trim();
+          geminiModelCache.set(apiKey, sorted);
+          return sorted;
+        }
       }
-    } catch (err) {
-      console.warn(`[Auto-Rotate] ${taskName}: ${name} thất bại (${err.message}). Tự động chuyển sang AI tiếp theo...`);
-      errors.push(`${name}: ${err.message}`);
     }
+  } catch (err) {
+    console.warn("Không thể lấy danh sách model động từ Gemini, sử dụng danh sách chuẩn:", err);
   }
 
-  if (errors.length === 0) {
-    throw new Error('Chưa cấu hình bất kỳ API Key nào. Vui lòng vào Cài đặt để thêm khóa Gemini, Groq hoặc OpenRouter.');
-  }
-
-  throw new Error(`Tất cả các nguồn AI đều gặp sự cố (${errors.join(' | ')}). Vui lòng kiểm tra API Key trong Cài đặt.`);
+  return tier === 'paid' ? GEMINI_PAID_MODELS : GEMINI_FREE_MODELS;
 }
 
-// Helper gọi Google Gemini với cơ chế thử tự động các model mới nhất
-export async function callGeminiContent(apiKey, body, models = GEMINI_FREE_MODELS) {
+// Helper gọi Google Gemini với cơ chế thử tự động các model hợp lệ mới nhất
+export async function callGeminiContent(apiKey, body, modelsOrTier = 'free') {
+  let modelsToTry;
+  if (Array.isArray(modelsOrTier)) {
+    modelsToTry = modelsOrTier;
+  } else {
+    modelsToTry = await getAvailableGeminiModels(apiKey, modelsOrTier);
+  }
+
   let lastError = null;
-  for (const model of models) {
+  for (const model of modelsToTry) {
     try {
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
         method: 'POST',
@@ -104,6 +97,31 @@ export async function callGeminiContent(apiKey, body, models = GEMINI_FREE_MODEL
       lastError = e;
     }
   }
+
+  // Nếu danh sách tĩnh thất bại, thử khám phá động và gọi các model còn lại
+  try {
+    const dynamicModels = await getAvailableGeminiModels(apiKey, typeof modelsOrTier === 'string' ? modelsOrTier : 'paid');
+    const remaining = dynamicModels.filter(m => !modelsToTry.includes(m));
+    for (const model of remaining) {
+      try {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) return text;
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+
   throw lastError || new Error('Không thể kết nối tới Google Gemini');
 }
 
