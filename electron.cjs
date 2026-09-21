@@ -1,14 +1,17 @@
-const { app, BrowserWindow, session, globalShortcut } = require('electron');
+const { app, BrowserWindow, session, globalShortcut, ipcMain, screen } = require('electron');
 const path = require('path');
 
 let mainWindow;
+let isMiniMode = false;
+const NORMAL_SIZE = { width: 940, height: 800 };
+const MINI_SIZE = { width: 480, height: 260 };
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 920,
-    height: 780,
+    width: NORMAL_SIZE.width,
+    height: NORMAL_SIZE.height,
     minWidth: 420,
-    minHeight: 620,
+    minHeight: 240,
     title: "JAVIS Idio - AI Voice & Live Translator Premium",
     backgroundColor: '#070a12',
     webPreferences: {
@@ -17,7 +20,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js')
     },
     autoHideMenuBar: true,
-    show: false // Show when ready to prevent flicker
+    show: false
   });
 
   const isDev = !app.isPackaged;
@@ -37,10 +40,43 @@ function createWindow() {
   });
 }
 
+function setMiniMode(enabled) {
+  if (!mainWindow) return;
+  isMiniMode = enabled;
+
+  const display = screen.getPrimaryDisplay();
+  const { width: screenWidth, height: screenHeight } = display.workAreaSize;
+
+  if (enabled) {
+    // Thu nhỏ thành thanh nổi góc phải dưới màn hình (ngay cạnh khay hệ thống / Zalo)
+    mainWindow.setAlwaysOnTop(true, 'floating');
+    mainWindow.setSize(MINI_SIZE.width, MINI_SIZE.height);
+    mainWindow.setPosition(screenWidth - MINI_SIZE.width - 24, screenHeight - MINI_SIZE.height - 24);
+  } else {
+    // Trở về kích thước đầy đủ
+    mainWindow.setAlwaysOnTop(false);
+    mainWindow.setSize(NORMAL_SIZE.width, NORMAL_SIZE.height);
+    mainWindow.center();
+  }
+}
+
 app.on('ready', () => {
   createWindow();
 
-  // Đăng ký phím tắt toàn hệ thống: Alt+Space để hiện/ẩn nhanh YAP AI bất kể đang dùng app gì
+  // IPC Handlers từ Renderer
+  ipcMain.on('toggle-mini-mode', (event, isMini) => {
+    setMiniMode(isMini);
+  });
+
+  ipcMain.on('set-always-on-top', (event, isTop) => {
+    if (mainWindow) {
+      mainWindow.setAlwaysOnTop(isTop, 'floating');
+    }
+  });
+
+  // Đăng ký phím tắt toàn hệ thống:
+  // 1. Alt + Space: Mở / Ẩn nhanh JAVIS Idio
+  // 2. Alt + Z: Bật / Tắt chế độ Cửa sổ Mini Ghim Nổi Zalo (Always On Top)
   try {
     globalShortcut.register('Alt+Space', () => {
       if (mainWindow) {
@@ -53,10 +89,13 @@ app.on('ready', () => {
       }
     });
 
-    globalShortcut.register('Alt+D', () => {
+    globalShortcut.register('Alt+Z', () => {
       if (mainWindow) {
         mainWindow.show();
         mainWindow.focus();
+        isMiniMode = !isMiniMode;
+        setMiniMode(isMiniMode);
+        mainWindow.webContents.send('toggle-mini-from-shortcut', isMiniMode);
       }
     });
   } catch (err) {

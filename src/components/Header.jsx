@@ -1,6 +1,6 @@
 import { Sparkles, Zap, ShieldCheck } from 'lucide-react';
 
-export default function Header() {
+export default function Header({ isMiniMode, onToggleMiniMode }) {
   return (
     <header className="sticky top-0 z-30 bg-[#0b1120]/80 backdrop-blur-xl border-b border-white/[0.08] shadow-2xl py-3 px-4 transition-all">
       <div className="max-w-5xl mx-auto flex items-center justify-between">
@@ -27,15 +27,25 @@ export default function Header() {
           </div>
         </div>
 
-        {/* Right: Engine Status Badge */}
-        <div className="hidden sm:flex items-center gap-2">
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-xs font-semibold">
+        {/* Right: Actions & Engine Status Badge */}
+        <div className="flex items-center gap-2">
+          {/* Mini Mode Toggle Button */}
+          <button
+            onClick={onToggleMiniMode}
+            title="Thu nhỏ thành cửa sổ nổi ghim trên Zalo / Game (Alt + Z)"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-yellow-500/10 hover:from-amber-500/30 hover:to-yellow-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold transition-all shadow-sm cursor-pointer"
+          >
+            <span>📌 Ghim Mini (Zalo)</span>
+            <span className="hidden md:inline text-[9px] bg-amber-500/20 px-1.5 py-0.5 rounded font-mono">Alt+Z</span>
+          </button>
+
+          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-xs font-semibold">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
             </span>
             <Zap className="w-3.5 h-3.5 text-amber-400" />
-            <span>AI Siêu Tốc 0.01s</span>
+            <span>0.01s</span>
           </div>
         </div>
       </div>

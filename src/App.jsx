@@ -8,11 +8,13 @@ import MeetingMode from './components/MeetingMode';
 import AiChat from './components/AiChat';
 import History from './components/History';
 import SettingsScreen from './components/Settings';
+import MiniFloatingWidget from './components/MiniFloatingWidget';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import ErrorBoundary from './components/ErrorBoundary';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dictate');
+  const [isMiniMode, setIsMiniMode] = useState(false);
   const [history, setHistory] = useLocalStorage('yap-history', []);
   const [settings, setSettings] = useLocalStorage('yap-settings', {
     defaultPair: 'vi-en',
@@ -23,7 +25,25 @@ export default function App() {
     saveHistory: true,
   });
 
+  const toggleMiniMode = (targetValue) => {
+    const nextVal = typeof targetValue === 'boolean' ? targetValue : !isMiniMode;
+    setIsMiniMode(nextVal);
+    if (typeof window !== 'undefined' && window.electronAPI?.toggleMiniMode) {
+      window.electronAPI.toggleMiniMode(nextVal);
+    }
+    if (nextVal) {
+      toast('Đã chuyển sang Cửa Sổ Mini Ghim Nổi (Zalo/Chat)!', { icon: '📌' });
+    }
+  };
+
   useEffect(() => {
+    // Lắng nghe phím tắt Alt+Z từ Electron
+    if (typeof window !== 'undefined' && window.electronAPI?.onToggleMiniShortcut) {
+      window.electronAPI.onToggleMiniShortcut((isMini) => {
+        setIsMiniMode(isMini);
+      });
+    }
+
     const handleOffline = () => toast.error("Đã mất kết nối mạng! Vui lòng kiểm tra lại Internet.", { duration: Infinity, id: 'offline' });
     const handleOnline = () => {
       toast.dismiss('offline');
@@ -60,6 +80,17 @@ export default function App() {
     }
   };
 
+  if (isMiniMode) {
+    return (
+      <ErrorBoundary>
+        <div className="h-screen w-screen bg-[#070a12] overflow-hidden p-1.5 flex flex-col">
+          <Toaster position="top-center" toastOptions={{ duration: 1500 }} />
+          <MiniFloatingWidget settings={settings} onExpand={() => toggleMiniMode(false)} />
+        </div>
+      </ErrorBoundary>
+    );
+  }
+
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-[#070a12] text-slate-100 flex flex-col font-sans relative antialiased selection:bg-emerald-500 selection:text-white overflow-hidden">
@@ -83,7 +114,7 @@ export default function App() {
           }} 
         />
 
-        <Header />
+        <Header isMiniMode={isMiniMode} onToggleMiniMode={() => toggleMiniMode()} />
 
         <main className="flex-1 overflow-y-auto p-3 sm:p-4 max-w-xl md:max-w-4xl lg:max-w-5xl mx-auto w-full z-10">
           {renderContent()}
