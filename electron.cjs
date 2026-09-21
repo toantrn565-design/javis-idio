@@ -9,7 +9,7 @@ function createWindow() {
     height: 780,
     minWidth: 420,
     minHeight: 620,
-    title: "YAP AI Voice & Translator - Premium Edition",
+    title: "JAVIS Idio - AI Voice & Live Translator Premium",
     backgroundColor: '#070a12',
     webPreferences: {
       nodeIntegration: false,
