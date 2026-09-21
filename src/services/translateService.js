@@ -46,6 +46,42 @@ async function executeWithAutoFailover(taskName, providers) {
   throw new Error(`Tất cả các nguồn AI đều gặp sự cố hoặc hết hạn mức (${errors.join(' | ')}). Vui lòng thêm hoặc kiểm tra API Key trong Cài đặt.`);
 }
 
+export const GEMINI_MODELS = [
+  'gemini-3.6-flash',
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
+  'gemini-1.5-flash-8b',
+  'gemini-1.5-pro'
+];
+
+// Helper gọi Google Gemini với cơ chế thử tự động các model mới nhất
+async function callGeminiContent(apiKey, body, models = GEMINI_MODELS) {
+  let lastError = null;
+  for (const model of models) {
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) return text;
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        const msg = errJson.error?.message || `HTTP ${res.status}`;
+        lastError = new Error(`${model}: ${msg}`);
+      }
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  throw lastError || new Error('Không thể kết nối tới Google Gemini');
+}
+
 // 1. DỊCH THUẬT VĂN BẢN (TRANSLATE TEXT)
 export async function translateText(text, sourceLanguage = 'vi', targetLanguage = 'en') {
   if (!text || !text.trim()) return '';
@@ -60,35 +96,15 @@ Do not add any explanation, notes, or markdown formatting. Return ONLY the pure 
 Translate the following text from ${sourceLanguage} to ${targetLanguage}:
 ${text}`;
 
-  // Ưu tiên 1: Google Gemini (Gemini 2.5 Flash / 2.0 Flash)
+  // Ưu tiên 1: Google Gemini (Tự động xoay model Gemini 3.6 / 2.5 / 2.0 / 1.5)
   if (keys.gemini) {
     providers.push({
       name: 'Google Gemini',
       execute: async () => {
-        const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
-        for (const model of models) {
-          try {
-            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${keys.gemini}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: translationPrompt }] }],
-                generationConfig: { temperature: 0.2 }
-              })
-            });
-
-            if (res.ok) {
-              const data = await res.json();
-              const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
-              if (result) return result;
-            } else {
-              const err = await res.json().catch(() => ({}));
-              if (model === models[models.length - 1]) throw new Error(err.error?.message || `Lỗi ${res.status}`);
-            }
-          } catch (e) {
-            if (model === models[models.length - 1]) throw e;
-          }
-        }
+        return await callGeminiContent(keys.gemini, {
+          contents: [{ parts: [{ text: translationPrompt }] }],
+          generationConfig: { temperature: 0.2 }
+        });
       }
     });
   }
@@ -204,32 +220,20 @@ export async function transcribeAudioOnly({ audioBlob, base64Audio, mimeType, la
     providers.push({
       name: 'Google Gemini Audio',
       execute: async () => {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${keys.gemini}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                { text: 'Transcribe the spoken audio accurately into the spoken language (Vietnamese/English). Add appropriate punctuation, capitalization, and numbers. Do not add preamble or markdown notes. Return ONLY the transcribed words.' },
-                {
-                  inlineData: {
-                    mimeType: mimeType || 'audio/webm',
-                    data: base64Audio
-                  }
+        return await callGeminiContent(keys.gemini, {
+          contents: [{
+            parts: [
+              { text: 'Transcribe the spoken audio accurately into the spoken language (Vietnamese/English). Add appropriate punctuation, capitalization, and numbers. Do not add preamble or markdown notes. Return ONLY the transcribed words.' },
+              {
+                inlineData: {
+                  mimeType: mimeType || 'audio/webm',
+                  data: base64Audio
                 }
-              ]
-            }],
-            generationConfig: { temperature: 0.1 }
-          })
+              }
+            ]
+          }],
+          generationConfig: { temperature: 0.1 }
         });
-
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error?.message || `Lỗi ${res.status}`);
-        }
-
-        const data = await res.json();
-        return data.candidates?.[0]?.content?.parts?.[0]?.text;
       }
     });
   }
@@ -372,19 +376,10 @@ export async function chatWithAI({ messages, image = null, documentText = '', do
           parts: lastParts
         });
 
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${keys.gemini}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents, generationConfig: { temperature: 0.5 } })
+        return await callGeminiContent(keys.gemini, {
+          contents,
+          generationConfig: { temperature: 0.5 }
         });
-
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error?.message || `Lỗi ${res.status}`);
-        }
-
-        const data = await res.json();
-        return data.candidates?.[0]?.content?.parts?.[0]?.text;
       }
     });
   }

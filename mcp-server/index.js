@@ -58,17 +58,20 @@ function postJSON(url, headers, body) {
 async function handleTranslate({ text, sourceLang = 'vi', targetLang = 'en' }) {
   const prompt = `You are a professional high-accuracy translator. Translate accurately without adding notes. Return ONLY the translated text.\n\nTranslate from ${sourceLang} to ${targetLang}:\n${text}`;
 
-  // 1. Thử Gemini
+  // 1. Thử Gemini (Xoay model gemini-3.6-flash, 2.5, 2.0, 1.5)
   if (CONFIG.geminiKey) {
-    try {
-      const res = await postJSON(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${CONFIG.geminiKey}`, {}, {
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.2 }
-      });
-      const translated = res.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (translated) return { translatedText: translated.trim(), provider: 'Google Gemini 2.5 Flash' };
-    } catch (e) {
-      console.error('Gemini error:', e.message);
+    const models = ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-pro'];
+    for (const model of models) {
+      try {
+        const res = await postJSON(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${CONFIG.geminiKey}`, {}, {
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.2 }
+        });
+        const translated = res.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (translated) return { translatedText: translated.trim(), provider: `Google Gemini (${model})` };
+      } catch (e) {
+        // Thử model tiếp theo
+      }
     }
   }
 

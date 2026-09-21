@@ -44,18 +44,36 @@ export default function Settings({ settings, setSettings }) {
       if (provider === 'gemini') {
         const key = formData.geminiApiKey?.trim();
         if (!key) throw new Error('Vui lòng nhập khóa Gemini trước khi test');
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: [{ parts: [{ text: 'Ping' }] }] })
-        });
+        
+        const models = ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-pro'];
+        let successModel = null;
+        let lastErrorMsg = '';
+
+        for (const model of models) {
+          try {
+            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ contents: [{ parts: [{ text: 'Ping' }] }] })
+            });
+            if (res.ok) {
+              successModel = model;
+              break;
+            } else {
+              const err = await res.json().catch(() => ({}));
+              lastErrorMsg = err.error?.message || `HTTP ${res.status}`;
+            }
+          } catch (e) {
+            lastErrorMsg = e.message;
+          }
+        }
+
         const elapsed = ((performance.now() - start) / 1000).toFixed(2);
-        if (res.ok) {
-          toast.success(`Google Gemini hoạt động tốt (${elapsed}s)!`, { icon: '✨' });
+        if (successModel) {
+          toast.success(`Google Gemini (${successModel}) hoạt động tốt (${elapsed}s)!`, { icon: '✨' });
           setTestingStatus(prev => ({ ...prev, gemini: `${elapsed}s OK` }));
         } else {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error?.message || `Lỗi HTTP ${res.status}`);
+          throw new Error(lastErrorMsg || 'Không thể kết nối tới Google Gemini');
         }
       } 
       else if (provider === 'groq') {
@@ -183,7 +201,7 @@ export default function Settings({ settings, setSettings }) {
         </div>
 
         <p className="text-xs text-slate-400">
-          Mô hình <strong>Gemini 2.5 Flash</strong> miễn phí rất hào phóng. Lấy key tại{' '}
+          Mô hình <strong>Gemini 3.6 / 2.5 / 2.0 Flash</strong> thế hệ mới nhất siêu tốc & thông minh. Lấy key tại{' '}
           <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-emerald-400 underline font-semibold inline-flex items-center gap-0.5">
             Google AI Studio <ExternalLink className="w-2.5 h-2.5" />
           </a>
