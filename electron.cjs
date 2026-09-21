@@ -1,5 +1,6 @@
 const { app, BrowserWindow, session, globalShortcut, ipcMain, screen, clipboard } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { exec } = require('child_process');
 
 let mainWindow;
@@ -9,6 +10,39 @@ let autoPasteEnabled = true;
 
 const NORMAL_SIZE = { width: 940, height: 800 };
 const MINI_SIZE = { width: 480, height: 260 };
+
+function getSettingsFilePath() {
+  const userDataPath = app.getPath('userData');
+  return path.join(userDataPath, 'javis_idio_settings.json');
+}
+
+function loadSettingsSync() {
+  try {
+    const filePath = getSettingsFilePath();
+    if (fs.existsSync(filePath)) {
+      const data = fs.readFileSync(filePath, 'utf-8');
+      return JSON.parse(data);
+    }
+  } catch (err) {
+    console.error('Lỗi đọc file settings:', err);
+  }
+  return null;
+}
+
+function saveSettingsSync(settings) {
+  try {
+    const filePath = getSettingsFilePath();
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(filePath, JSON.stringify(settings, null, 2), 'utf-8');
+    return true;
+  } catch (err) {
+    console.error('Lỗi lưu file settings:', err);
+    return false;
+  }
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -136,6 +170,17 @@ app.on('ready', () => {
   ipcMain.on('paste-to-active-window', (event, text) => {
     if (autoPasteEnabled) {
       pasteToActiveWindow(text);
+    }
+  });
+
+  ipcMain.handle('get-saved-settings', () => {
+    return loadSettingsSync();
+  });
+
+  ipcMain.on('save-settings', (event, settings) => {
+    saveSettingsSync(settings);
+    if (settings?.voiceTypingHotkey) {
+      registerVoiceShortcut(settings.voiceTypingHotkey);
     }
   });
 

@@ -42,6 +42,22 @@ export default function App() {
   };
 
   useEffect(() => {
+    // 0. Tải cấu hình đã lưu từ file hệ thống Electron nếu có
+    if (typeof window !== 'undefined' && window.electronAPI?.loadSettingsFromFile) {
+      window.electronAPI.loadSettingsFromFile().then((fileSettings) => {
+        if (fileSettings && typeof fileSettings === 'object' && Object.keys(fileSettings).length > 0) {
+          setSettings(prev => {
+            const merged = { ...prev, ...fileSettings };
+            try {
+              localStorage.setItem('yap-settings', JSON.stringify(merged));
+              localStorage.setItem('igren-settings', JSON.stringify(merged));
+            } catch (e) {}
+            return merged;
+          });
+        }
+      }).catch(e => console.log('Không thể đọc file settings:', e));
+    }
+
     // 1. Lắng nghe phím tắt Alt+Z từ Electron
     if (typeof window !== 'undefined' && window.electronAPI?.onToggleMiniShortcut) {
       window.electronAPI.onToggleMiniShortcut((isMini) => {

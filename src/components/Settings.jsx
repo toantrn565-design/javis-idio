@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { LANGUAGE_PAIRS } from '../constants/languages';
 import { Key, Wand2, CheckCircle2, Eye, EyeOff, Save, Sparkles, Zap, Bot, Activity, ShieldCheck, RefreshCw, ExternalLink, Globe, Crown } from 'lucide-react';
 import { toast } from 'react-hot-toast';
@@ -6,19 +6,19 @@ import { callGeminiContent, callGroqChat, callOpenRouterChat, getAvailableGemini
 
 export default function Settings({ settings, setSettings }) {
   const [formData, setFormData] = useState({
-    geminiApiKey: settings.geminiApiKey || '',
-    groqApiKey: settings.groqApiKey || '',
-    openrouterApiKey: settings.openrouterApiKey || '',
-    openaiApiKey: settings.openaiApiKey || '',
-    geminiPaidApiKey: settings.geminiPaidApiKey || '',
-    voiceTypingHotkey: settings.voiceTypingHotkey || 'F8',
-    autoPasteToActiveWindow: settings.autoPasteToActiveWindow !== false,
-    voiceTypingRefine: settings.voiceTypingRefine !== false,
-    autoCopy: settings.autoCopy !== false,
-    defaultRefineMode: settings.defaultRefineMode || 'exact',
-    defaultPair: settings.defaultPair || 'vi-en',
-    autoSpeak: settings.autoSpeak !== false,
-    saveHistory: settings.saveHistory !== false,
+    geminiApiKey: settings?.geminiApiKey || '',
+    groqApiKey: settings?.groqApiKey || '',
+    openrouterApiKey: settings?.openrouterApiKey || '',
+    openaiApiKey: settings?.openaiApiKey || '',
+    geminiPaidApiKey: settings?.geminiPaidApiKey || '',
+    voiceTypingHotkey: settings?.voiceTypingHotkey || 'F8',
+    autoPasteToActiveWindow: settings?.autoPasteToActiveWindow !== false,
+    voiceTypingRefine: settings?.voiceTypingRefine !== false,
+    autoCopy: settings?.autoCopy !== false,
+    defaultRefineMode: settings?.defaultRefineMode || 'exact',
+    defaultPair: settings?.defaultPair || 'vi-en',
+    autoSpeak: settings?.autoSpeak !== false,
+    saveHistory: settings?.saveHistory !== false,
   });
 
   const [showKeys, setShowKeys] = useState({
@@ -32,9 +32,61 @@ export default function Settings({ settings, setSettings }) {
   const [saved, setSaved] = useState(false);
   const [testingStatus, setTestingStatus] = useState({});
 
+  // Luôn đồng bộ dữ liệu nếu settings từ ngoài được nạp
+  useEffect(() => {
+    if (settings) {
+      setFormData(prev => ({
+        ...prev,
+        geminiApiKey: settings.geminiApiKey || prev.geminiApiKey || '',
+        groqApiKey: settings.groqApiKey || prev.groqApiKey || '',
+        openrouterApiKey: settings.openrouterApiKey || prev.openrouterApiKey || '',
+        openaiApiKey: settings.openaiApiKey || prev.openaiApiKey || '',
+        geminiPaidApiKey: settings.geminiPaidApiKey || prev.geminiPaidApiKey || '',
+        voiceTypingHotkey: settings.voiceTypingHotkey || prev.voiceTypingHotkey || 'F8',
+        autoPasteToActiveWindow: settings.autoPasteToActiveWindow !== undefined ? settings.autoPasteToActiveWindow : prev.autoPasteToActiveWindow,
+        voiceTypingRefine: settings.voiceTypingRefine !== undefined ? settings.voiceTypingRefine : prev.voiceTypingRefine,
+        autoCopy: settings.autoCopy !== undefined ? settings.autoCopy : prev.autoCopy,
+        defaultRefineMode: settings.defaultRefineMode || prev.defaultRefineMode || 'exact',
+        defaultPair: settings.defaultPair || prev.defaultPair || 'vi-en',
+        autoSpeak: settings.autoSpeak !== undefined ? settings.autoSpeak : prev.autoSpeak,
+        saveHistory: settings.saveHistory !== undefined ? settings.saveHistory : prev.saveHistory,
+      }));
+    }
+  }, [settings]);
+
+  // Hàm tự động lưu tức thì vào LocalStorage, React State và File hệ thống Electron
+  const saveSettingsInstant = (newData) => {
+    const dataToSave = {
+      ...newData,
+      apiKeys: [newData.geminiPaidApiKey, newData.geminiApiKey, newData.groqApiKey, newData.openrouterApiKey, newData.openaiApiKey].filter(Boolean).join(',')
+    };
+
+    setSettings(prev => ({ ...prev, ...dataToSave }));
+    try {
+      localStorage.setItem('yap-settings', JSON.stringify(dataToSave));
+      localStorage.setItem('igren-settings', JSON.stringify(dataToSave));
+    } catch (e) {
+      console.error('LocalStorage save error:', e);
+    }
+
+    if (typeof window !== 'undefined') {
+      if (window.electronAPI?.saveSettingsToFile) {
+        window.electronAPI.saveSettingsToFile(dataToSave);
+      }
+      if (window.electronAPI?.updateVoiceHotkey) {
+        window.electronAPI.updateVoiceHotkey({
+          hotkey: newData.voiceTypingHotkey || 'F8',
+          autoPaste: newData.autoPasteToActiveWindow !== false
+        });
+      }
+    }
+  };
+
   const handleChange = (key, value) => {
-    setFormData(prev => ({ ...prev, [key]: value }));
-    setSaved(false);
+    const nextData = { ...formData, [key]: value };
+    setFormData(nextData);
+    saveSettingsInstant(nextData);
+    setSaved(true);
   };
 
   const toggleShowKey = (provider) => {
@@ -43,6 +95,7 @@ export default function Settings({ settings, setSettings }) {
 
   // Kiểm tra từng API Key trực tiếp
   const handleTestKey = async (provider) => {
+    saveSettingsInstant(formData);
     setTestingStatus(prev => ({ ...prev, [provider]: 'Đang test...' }));
     const start = performance.now();
 
@@ -110,24 +163,7 @@ export default function Settings({ settings, setSettings }) {
 
   const handleSave = (e) => {
     if (e) e.preventDefault();
-    
-    const dataToSave = {
-      ...formData,
-      apiKeys: [formData.geminiPaidApiKey, formData.geminiApiKey, formData.groqApiKey, formData.openrouterApiKey, formData.openaiApiKey].filter(Boolean).join(',')
-    };
-
-    setSettings(prev => ({ ...prev, ...dataToSave }));
-    localStorage.setItem('yap-settings', JSON.stringify(dataToSave));
-    localStorage.setItem('igren-settings', JSON.stringify(dataToSave));
-
-    // Cập nhật phím tắt toàn hệ thống cho Electron
-    if (typeof window !== 'undefined' && window.electronAPI?.updateVoiceHotkey) {
-      window.electronAPI.updateVoiceHotkey({
-        hotkey: formData.voiceTypingHotkey || 'F8',
-        autoPaste: formData.autoPasteToActiveWindow !== false
-      });
-    }
-
+    saveSettingsInstant(formData);
     setSaved(true);
     toast.success('Đã lưu cấu hình & Cập nhật phím tắt giọng nói thành công!', { icon: '✅' });
     setTimeout(() => setSaved(false), 3000);
@@ -140,7 +176,7 @@ export default function Settings({ settings, setSettings }) {
           <h2 className="text-lg font-black text-white flex items-center gap-2 font-['Outfit']">
             <Key className="w-5 h-5 text-emerald-400" /> Cấu Hình API Key & Tự Động Xoay Vòng
           </h2>
-          <p className="text-xs text-slate-400">Ưu tiên Gemini #1 &rarr; Tự động nhảy sang Groq / OpenRouter / OpenAI khi hết Quota</p>
+          <p className="text-xs text-slate-400">Tự động lưu tức thì mọi thay đổi &bull; Tự động nhảy sang AI dự phòng khi hết Quota</p>
         </div>
 
         {saved && (
