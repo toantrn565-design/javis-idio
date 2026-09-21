@@ -1,0 +1,16 @@
+{
+  "appId": "com.yap.translator.premium",
+  "appName": "YAP AI Translator Premium",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1500,
+      "backgroundColor": "#070a12"
+    }
+  },
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  }
+}

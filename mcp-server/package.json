@@ -1,0 +1,13 @@
+{
+  "name": "yap-ai-mcp-server",
+  "version": "1.0.0",
+  "description": "Model Context Protocol (MCP) Server for YAP AI Voice & Live Translator",
+  "main": "index.js",
+  "type": "module",
+  "bin": {
+    "yap-ai-mcp": "./index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.6.1"
+  }
+}
